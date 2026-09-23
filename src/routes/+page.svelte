@@ -793,20 +793,30 @@
 		white-space: nowrap;
 	}
 	/* Semua kategori terlihat sekaligus (terbungkus ke baris berikutnya), tanpa geser */
+	/* Panel kategori: latar, garis tepi, dan jarak memisahkannya dari daftar produk */
 	.tabs {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
+		padding: 0.65rem;
+		margin-bottom: 0.5rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 14px;
+		box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
 	}
 	.tabs button {
 		flex: none;
 		min-height: var(--touch-lg);
-		border: 1px solid var(--border);
+		border: 1px solid transparent;
 		border-radius: 999px;
-		background: var(--surface);
+		background: var(--bg);
 		padding: 0 1.1rem;
 		font-weight: 600;
 		color: var(--muted);
+	}
+	.tabs button:active:not(.selected) {
+		background: var(--brand-soft);
 	}
 	.tabs button.selected {
 		border-color: var(--brand);
