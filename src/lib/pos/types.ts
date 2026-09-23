@@ -88,6 +88,18 @@ export const CHANNEL_LABEL: Record<string, string> = {
 	marketplace: 'Marketplace'
 };
 
+// Pelanggan terpilih di layar kasir. id null = pelanggan baru (dibuat
+// server saat transaksi disimpan).
+export type Customer = {
+	id: string | null;
+	name: string;
+	phone: string;
+	default_address: string | null;
+	default_patokan: string | null;
+	phone_verified: boolean;
+	from_website: boolean;
+};
+
 export type CartLine = {
 	key: string;
 	product: Product;

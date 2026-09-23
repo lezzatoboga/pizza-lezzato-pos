@@ -2,6 +2,7 @@ import { supabase } from '$lib/supabase/client';
 import type {
 	BankAccount,
 	ChosenOption,
+	Customer,
 	Menu,
 	Outlet,
 	PackageChoiceGroup,
@@ -166,8 +167,12 @@ export type TransactionPayload = {
 	marketplace_platform_id?: string;
 	markup_percent?: number;
 	shipping_cost?: number;
+	// Admin toko: pelanggan terdaftar ({id}) atau baru ({name, phone})
+	customer?: { id: string } | { name: string; phone: string };
+	// Admin toko: nama untuk pesanan ini; marketplace: kode pesanan
 	customer_name?: string;
-	customer_phone?: string;
+	delivery_address?: string;
+	delivery_patokan?: string;
 	notes?: string;
 	items: {
 		item_type: 'product' | 'package';
@@ -246,17 +251,25 @@ export async function loadTransactions(date: string): Promise<TransactionRow[]> 
 	) as unknown as TransactionRow[];
 }
 
-export type MenuSyncRun = { created_at: string; status: string; error: string | null };
+export type MenuSyncRun = {
+	kind: 'menu' | 'customers';
+	created_at: string;
+	status: string;
+	error: string | null;
+};
 
-export async function lastMenuSync(): Promise<MenuSyncRun | null> {
-	return unwrap(
+// Hasil sinkron terakhir per jenis (menu, pelanggan).
+export async function lastSyncRuns(): Promise<MenuSyncRun[]> {
+	const rows = unwrap(
 		await supabase
 			.from('menu_sync_runs')
-			.select('created_at, status, error')
+			.select('kind, created_at, status, error')
 			.order('created_at', { ascending: false })
-			.limit(1)
-			.maybeSingle()
-	);
+			.limit(20)
+	) as MenuSyncRun[];
+	const latest = new Map<string, MenuSyncRun>();
+	for (const r of rows) if (!latest.has(r.kind)) latest.set(r.kind, r);
+	return [...latest.values()];
 }
 
 export async function syncMenuNow(): Promise<{
@@ -357,4 +370,26 @@ export async function closeShift(shiftId: string, notes: string): Promise<ShiftS
 	return unwrap(
 		await supabase.rpc('close_shift', { p_shift_id: shiftId, p_notes: notes })
 	) as ShiftSummary;
+}
+
+// ---------------------------------------------------------------------
+// Pelanggan
+// ---------------------------------------------------------------------
+
+// Angka = cari nomor HP (min. 4 digit), huruf = cari nama (min. 3 huruf).
+export async function searchCustomers(query: string): Promise<Customer[]> {
+	return unwrap(await supabase.rpc('search_customers', { p_query: query })) as Customer[];
+}
+
+export async function syncCustomersNow(): Promise<{ customers: number; skipped: number }> {
+	const { data, error } = await supabase.functions.invoke('sync-customers', {
+		method: 'POST',
+		body: {}
+	});
+	if (error) {
+		const context = (error as { context?: Response }).context;
+		const body = context ? await context.json().catch(() => null) : null;
+		throw new Error(body?.error ?? 'Sinkron pelanggan gagal. Periksa koneksi internet.');
+	}
+	return data;
 }

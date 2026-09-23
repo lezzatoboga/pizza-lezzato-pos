@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/auth/auth.svelte';
+	import CustomerDialog from '$lib/components/CustomerDialog.svelte';
 	import OpenShiftForm from '$lib/components/OpenShiftForm.svelte';
 	import PackageDialog from '$lib/components/PackageDialog.svelte';
 	import PaymentDialog from '$lib/components/PaymentDialog.svelte';
 	import ProductDialog from '$lib/components/ProductDialog.svelte';
-	import { friendlyError, rupiah, timeOf } from '$lib/format';
+	import { formatPhone, friendlyError, rupiah, timeOf } from '$lib/format';
 	import {
 		createTransaction,
 		loadContext,
@@ -19,6 +20,7 @@
 	import { applyMarkup, lineTotal } from '$lib/pos/pricing';
 	import type {
 		CartLine,
+		Customer,
 		Channel,
 		Menu,
 		Product,
@@ -42,8 +44,14 @@
 	let platformId = $state('');
 	let markupOverride = $state<string | null>(null);
 	let shippingInput = $state('');
-	let customerName = $state('');
-	let customerPhone = $state('');
+	// Pelanggan (admin toko) — nama/alamat bisa diubah khusus pesanan ini
+	let customer = $state<Customer | null>(null);
+	let pickingCustomer = $state(false);
+	let orderName = $state('');
+	let deliveryAddress = $state('');
+	let deliveryPatokan = $state('');
+	// Marketplace: kode pesanan dari platform
+	let marketplaceRef = $state('');
 	let orderNotes = $state('');
 
 	let saving = $state(false);
@@ -119,6 +127,18 @@
 		);
 	}
 
+	// Admin toko delivery: pelanggan & alamat wajib; dine-in/take away opsional.
+	const isDelivery = $derived(channel === 'admin_toko' && salesType === 'delivery');
+	const customerMissing = $derived(isDelivery && (!customer || !deliveryAddress.trim()));
+
+	function selectCustomer(c: Customer) {
+		customer = c;
+		orderName = c.name;
+		deliveryAddress = c.default_address ?? '';
+		deliveryPatokan = c.default_patokan ?? '';
+		pickingCustomer = false;
+	}
+
 	const subtotal = $derived(lines.reduce((sum, l) => sum + priceOf(l), 0));
 	const total = $derived(subtotal + shipping);
 
@@ -170,8 +190,11 @@
 	function resetOrder() {
 		lines = [];
 		shippingInput = '';
-		customerName = '';
-		customerPhone = '';
+		customer = null;
+		orderName = '';
+		deliveryAddress = '';
+		deliveryPatokan = '';
+		marketplaceRef = '';
 		orderNotes = '';
 		markupOverride = null;
 		saveError = '';
@@ -193,8 +216,6 @@
 			channel,
 			sales_type: channel === 'marketplace' ? 'delivery' : salesType,
 			shipping_cost: shipping,
-			customer_name: customerName,
-			customer_phone: customerPhone,
 			notes: orderNotes,
 			items: lines.map((l) => ({
 				item_type: l.product.kind === 'package' ? ('package' as const) : ('product' as const),
@@ -206,7 +227,18 @@
 				choices: Object.fromEntries(l.choices.map((c) => [c.key, c.value]))
 			}))
 		};
+		if (channel === 'admin_toko' && customer) {
+			payload.customer = customer.id
+				? { id: customer.id }
+				: { name: customer.name, phone: customer.phone };
+			payload.customer_name = orderName.trim() || customer.name;
+		}
+		if (isDelivery) {
+			payload.delivery_address = deliveryAddress;
+			payload.delivery_patokan = deliveryPatokan;
+		}
 		if (channel === 'marketplace') {
+			payload.customer_name = marketplaceRef;
 			payload.marketplace_platform_id = platformId;
 			payload.markup_percent = markupPercent;
 		}
@@ -367,23 +399,55 @@
 				</div>
 			{/if}
 
-			<div class="customer">
+			{#if channel === 'marketplace'}
 				<input
 					class="input"
-					placeholder="Nama customer (opsional)"
-					bind:value={customerName}
+					placeholder="Kode pesanan / nama (opsional)"
+					bind:value={marketplaceRef}
 					maxlength="80"
 				/>
-				{#if salesType === 'delivery' || channel === 'marketplace'}
-					<input
-						class="input"
-						placeholder="No. HP (opsional)"
-						inputmode="tel"
-						bind:value={customerPhone}
-						maxlength="20"
-					/>
-				{/if}
-			</div>
+			{:else if !customer}
+				<button
+					class="pick-customer"
+					class:required={isDelivery}
+					onclick={() => (pickingCustomer = true)}
+				>
+					+ Pilih pelanggan
+					<small>{isDelivery ? '(wajib untuk delivery)' : '(opsional)'}</small>
+				</button>
+			{:else}
+				<div class="customer-card">
+					<div class="customer-head">
+						<input
+							class="input name"
+							bind:value={orderName}
+							maxlength="80"
+							aria-label="Nama untuk pesanan ini"
+						/>
+						<button class="link" onclick={() => (pickingCustomer = true)}>Ganti</button>
+						<button class="link" onclick={() => (customer = null)} aria-label="Hapus pelanggan"
+							>✕</button
+						>
+					</div>
+					<span class="customer-phone">
+						{formatPhone(customer.phone)}{customer.id ? '' : ' · pelanggan baru'}
+					</span>
+					{#if isDelivery}
+						<textarea
+							class="input address"
+							rows="2"
+							placeholder="Alamat pengiriman (wajib)"
+							bind:value={deliveryAddress}
+							maxlength="300"></textarea>
+						<input
+							class="input"
+							placeholder="Patokan (opsional)"
+							bind:value={deliveryPatokan}
+							maxlength="150"
+						/>
+					{/if}
+				</div>
+			{/if}
 
 			<ul class="lines">
 				{#each lines as line (line.key)}
@@ -443,21 +507,26 @@
 			</dl>
 
 			<p class="error" role="alert">
-				{saveError || (!markupValid ? 'Markup tidak valid' : '')}
+				{saveError ||
+					(!markupValid
+						? 'Markup tidak valid'
+						: customerMissing && lines.length > 0
+							? 'Delivery: pilih pelanggan dan isi alamat'
+							: '')}
 			</p>
 
 			<div class="actions">
 				<button
 					class="btn-ghost"
 					onclick={() => save(false)}
-					disabled={saving || lines.length === 0 || !markupValid}
+					disabled={saving || lines.length === 0 || !markupValid || customerMissing}
 				>
 					Simpan
 				</button>
 				<button
 					class="btn-primary"
 					onclick={() => save(true)}
-					disabled={saving || lines.length === 0 || !markupValid}
+					disabled={saving || lines.length === 0 || !markupValid || customerMissing}
 				>
 					{saving ? 'Menyimpan…' : `Bayar ${rupiah(total)}`}
 				</button>
@@ -475,6 +544,14 @@
 		{markupPercent}
 		onadd={addLine}
 		onclose={() => (picking = null)}
+	/>
+{/if}
+
+{#if pickingCustomer}
+	<CustomerDialog
+		delivery={isDelivery}
+		onselect={selectCustomer}
+		onclose={() => (pickingCustomer = false)}
 	/>
 {/if}
 
@@ -636,9 +713,54 @@
 		align-items: center;
 		gap: 0.5rem;
 	}
-	.customer {
+	.pick-customer {
 		display: flex;
+		align-items: center;
 		gap: 0.5rem;
+		min-height: var(--touch-lg);
+		padding: 0 1rem;
+		border: 1px dashed var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+		color: var(--brand);
+		font-weight: 600;
+	}
+	.pick-customer small {
+		color: var(--muted);
+		font-weight: 400;
+	}
+	.pick-customer.required {
+		border-color: var(--brand);
+		background: var(--brand-soft);
+	}
+	.pick-customer:active {
+		background: var(--brand-soft);
+	}
+	.customer-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		padding: 0.6rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+	}
+	.customer-head {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	.customer-head .name {
+		flex: 1;
+		font-weight: 600;
+	}
+	.customer-phone {
+		padding-left: 0.25rem;
+		color: var(--muted);
+		font-size: 0.9rem;
+	}
+	textarea.address {
+		padding: 0.6rem 0.85rem;
+		resize: vertical;
 	}
 	.input.small {
 		width: 7.5rem;

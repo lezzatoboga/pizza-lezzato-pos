@@ -418,3 +418,6 @@ enabled = true
 # atau izin sync_menu dari sesi pengguna.
 [functions.sync-menu]
 verify_jwt = false
+
+[functions.sync-customers]
+verify_jwt = false

@@ -3,6 +3,7 @@
 // tombol "Sinkron menu" oleh pengguna dengan izin sync_menu.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { adminClient, corsHeaders, json } from '../_shared/http.ts';
+import { authorizeSync } from '../_shared/sync-auth.ts';
 
 function websiteClient() {
 	const url = Deno.env.get('WEBSITE_SUPABASE_URL');
@@ -11,35 +12,11 @@ function websiteClient() {
 	return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-// Mengembalikan pemicu sinkron, atau Response penolakan.
-async function authorize(req: Request): Promise<{ trigger: 'cron' | 'manual'; userId: string | null } | Response> {
-	const cronSecret = Deno.env.get('SYNC_MENU_CRON_SECRET');
-	const givenSecret = req.headers.get('x-cron-secret');
-	if (givenSecret) {
-		if (cronSecret && givenSecret === cronSecret) return { trigger: 'cron', userId: null };
-		return json({ error: 'Tidak diizinkan' }, 401);
-	}
-
-	const authHeader = req.headers.get('Authorization') ?? '';
-	if (!authHeader.startsWith('Bearer ')) return json({ error: 'Tidak diizinkan' }, 401);
-
-	const userClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
-		global: { headers: { Authorization: authHeader } },
-		auth: { persistSession: false, autoRefreshToken: false }
-	});
-	const [{ data: allowed }, { data: userId }] = await Promise.all([
-		userClient.rpc('has_permission', { p_code: 'sync_menu' }),
-		userClient.rpc('current_pos_user_id')
-	]);
-	if (!allowed || !userId) return json({ error: 'Anda tidak punya izin sinkron menu' }, 403);
-	return { trigger: 'manual', userId: userId as string };
-}
-
 Deno.serve(async (req) => {
 	if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 	if (req.method !== 'POST') return json({ error: 'Metode tidak didukung' }, 405);
 
-	const auth = await authorize(req);
+	const auth = await authorizeSync(req);
 	if (auth instanceof Response) return auth;
 
 	const admin = adminClient();
@@ -84,6 +61,7 @@ Deno.serve(async (req) => {
 		const message = (e as Error).message;
 		console.error('sync-menu:', message);
 		await admin.from('menu_sync_runs').insert({
+			kind: 'menu',
 			trigger: auth.trigger,
 			triggered_by: auth.userId,
 			status: 'failed',
