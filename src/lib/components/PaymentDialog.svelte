@@ -2,16 +2,18 @@
 	import Modal from './Modal.svelte';
 	import { friendlyError, rupiah } from '$lib/format';
 	import { payTransaction, type PaymentResult } from '$lib/pos/data';
-	import type { PaymentMethod, SavedTransaction } from '$lib/pos/types';
+	import type { BankAccount, PaymentMethod, SavedTransaction } from '$lib/pos/types';
 
 	let {
 		transaction,
 		methods,
+		bankAccounts,
 		ondone,
 		onclose
 	}: {
 		transaction: SavedTransaction;
 		methods: PaymentMethod[];
+		bankAccounts: BankAccount[];
 		ondone: (result: PaymentResult) => void;
 		onclose: () => void;
 	} = $props();
@@ -20,13 +22,17 @@
 
 	let methodId = $state(methods.find((m) => m.is_cash)?.id ?? methods[0]?.id ?? '');
 	let cashInput = $state('');
+	let bankId = $state<string | null>(null);
 	let submitting = $state(false);
 	let error = $state('');
 
 	const method = $derived(methods.find((m) => m.id === methodId));
 	const cash = $derived(Number(cashInput.replace(/\D/g, '')) || 0);
 	const change = $derived(cash - transaction.total);
-	const canPay = $derived(!!method && (!method.is_cash || cash >= transaction.total));
+	const needsBank = $derived(!!method?.requires_bank_account);
+	const canPay = $derived(
+		!!method && (!method.is_cash || cash >= transaction.total) && (!needsBank || !!bankId)
+	);
 
 	function setCash(value: number) {
 		cashInput = String(value);
@@ -37,7 +43,14 @@
 		submitting = true;
 		error = '';
 		try {
-			ondone(await payTransaction(transaction.id, method.id, method.is_cash ? cash : null));
+			ondone(
+				await payTransaction(
+					transaction.id,
+					method.id,
+					method.is_cash ? cash : null,
+					needsBank ? bankId : null
+				)
+			);
 		} catch (e) {
 			error = friendlyError(e);
 		} finally {
@@ -88,8 +101,26 @@
 			<strong>{rupiah(Math.abs(change))}</strong>
 		</p>
 	{:else if method}
+		{#if needsBank}
+			<p class="field-label">
+				Rekening tujuan <span class="required" class:done={!!bankId}
+					>{bankId ? '✓' : 'wajib pilih'}</span
+				>
+			</p>
+			<div class="methods">
+				{#each bankAccounts as b (b.id)}
+					<button class="method" class:selected={b.id === bankId} onclick={() => (bankId = b.id)}>
+						{b.bank_name}
+					</button>
+				{:else}
+					<p class="hint">Belum ada rekening aktif. Hubungi Owner.</p>
+				{/each}
+			</div>
+		{/if}
 		<p class="hint">
-			Pastikan dana {method.name} sebesar {rupiah(transaction.total)} sudah diterima.
+			Pastikan dana {method.name}{needsBank && bankId
+				? ` ke ${bankAccounts.find((b) => b.id === bankId)?.bank_name}`
+				: ''} sebesar {rupiah(transaction.total)} sudah diterima.
 		</p>
 	{/if}
 
@@ -166,6 +197,26 @@
 	}
 	.quick button:disabled {
 		opacity: 0.4;
+	}
+	.field-label {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin: 0 0 0.5rem;
+		color: var(--muted);
+		font-size: 0.9rem;
+	}
+	.required {
+		font-size: 0.75rem;
+		font-weight: 600;
+		padding: 0.1rem 0.5rem;
+		border-radius: 999px;
+		background: var(--brand-soft);
+		color: var(--danger);
+	}
+	.required.done {
+		background: #eaf6ee;
+		color: #1e6b3a;
 	}
 	.hint {
 		color: var(--muted);

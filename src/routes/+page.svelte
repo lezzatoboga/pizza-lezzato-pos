@@ -477,6 +477,7 @@
 	<PaymentDialog
 		transaction={paying}
 		methods={ctx.paymentMethods}
+		bankAccounts={ctx.bankAccounts}
 		ondone={onPaid}
 		onclose={onPaymentClosed}
 	/>

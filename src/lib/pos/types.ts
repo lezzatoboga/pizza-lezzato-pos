@@ -59,7 +59,16 @@ export type Shift = {
 	status: 'open' | 'closed';
 };
 
-export type PaymentMethod = { id: string; code: string; name: string; is_cash: boolean };
+export type PaymentMethod = {
+	id: string;
+	code: string;
+	name: string;
+	is_cash: boolean;
+	// Transfer Bank: wajib pilih rekening tujuan
+	requires_bank_account: boolean;
+};
+
+export type BankAccount = { id: string; bank_name: string };
 
 export type Platform = { id: string; code: string; name: string; markup_percent: number };
 

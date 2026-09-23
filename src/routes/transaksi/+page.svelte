@@ -6,12 +6,14 @@
 	import {
 		CHANNEL_LABEL,
 		SALES_TYPE_LABEL,
+		type BankAccount,
 		type PaymentMethod,
 		type SavedTransaction
 	} from '$lib/pos/types';
 
 	let rows = $state<TransactionRow[] | null>(null);
 	let methods = $state<PaymentMethod[]>([]);
+	let bankAccounts = $state<BankAccount[]>([]);
 	let error = $state('');
 	let filter = $state<'all' | 'unpaid'>('all');
 	let paying = $state<SavedTransaction | null>(null);
@@ -29,7 +31,9 @@
 
 	onMount(async () => {
 		try {
-			methods = (await loadContext()).paymentMethods;
+			const ctx = await loadContext();
+			methods = ctx.paymentMethods;
+			bankAccounts = ctx.bankAccounts;
 		} catch (e) {
 			error = friendlyError(e);
 		}
@@ -99,7 +103,11 @@
 						{#if r.status === 'voided'}
 							<span class="badge void">Dibatalkan</span>
 						{:else if r.payment_status === 'paid'}
-							<span class="badge paid">Lunas · {r.payment_methods?.name}</span>
+							<span class="badge paid"
+								>Lunas · {r.payment_methods?.name}{r.bank_accounts
+									? ` ${r.bank_accounts.bank_name}`
+									: ''}</span
+							>
 						{:else}
 							<button
 								class="btn-primary pay"
@@ -122,6 +130,7 @@
 	<PaymentDialog
 		transaction={paying}
 		{methods}
+		{bankAccounts}
 		ondone={() => {
 			paying = null;
 			refresh();

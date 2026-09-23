@@ -1,5 +1,6 @@
 import { supabase } from '$lib/supabase/client';
 import type {
+	BankAccount,
 	ChosenOption,
 	Menu,
 	Outlet,
@@ -102,12 +103,13 @@ export type PosContext = {
 	outlet: Outlet;
 	shift: Shift | null;
 	paymentMethods: PaymentMethod[];
+	bankAccounts: BankAccount[];
 	platforms: Platform[];
 };
 
 // Fase 1: satu outlet aktif (outlet utama).
 export async function loadContext(): Promise<PosContext> {
-	const [outlets, methods, platforms] = await Promise.all([
+	const [outlets, methods, banks, platforms] = await Promise.all([
 		supabase
 			.from('outlets')
 			.select('id, code, name')
@@ -116,9 +118,10 @@ export async function loadContext(): Promise<PosContext> {
 			.limit(1),
 		supabase
 			.from('payment_methods')
-			.select('id, code, name, is_cash')
+			.select('id, code, name, is_cash, requires_bank_account')
 			.eq('active', true)
 			.order('sort_order'),
+		supabase.from('bank_accounts').select('id, bank_name').eq('active', true).order('sort_order'),
 		supabase
 			.from('marketplace_platforms')
 			.select('id, code, name, markup_percent')
@@ -142,6 +145,7 @@ export async function loadContext(): Promise<PosContext> {
 		outlet,
 		shift,
 		paymentMethods: unwrap(methods),
+		bankAccounts: unwrap(banks),
 		platforms: (unwrap(platforms) as Platform[]).map((p) => ({
 			...p,
 			markup_percent: Number(p.markup_percent)
@@ -188,13 +192,15 @@ export type PaymentResult = SavedTransaction & { amount_paid: number; change_amo
 export async function payTransaction(
 	transactionId: string,
 	paymentMethodId: string,
-	amountPaid: number | null
+	amountPaid: number | null,
+	bankAccountId: string | null
 ): Promise<PaymentResult> {
 	return unwrap(
 		await supabase.rpc('pay_transaction', {
 			p_transaction_id: transactionId,
 			p_payment_method_id: paymentMethodId,
-			p_amount_paid: amountPaid
+			p_amount_paid: amountPaid,
+			p_bank_account_id: bankAccountId
 		})
 	) as PaymentResult;
 }
@@ -211,6 +217,7 @@ export type TransactionRow = {
 	status: 'active' | 'voided';
 	customer_name: string | null;
 	payment_methods: { name: string } | null;
+	bank_accounts: { bank_name: string } | null;
 	marketplace_platforms: { name: string } | null;
 	transaction_items: {
 		item_type: 'product' | 'package';
@@ -229,7 +236,7 @@ export async function loadTransactions(date: string): Promise<TransactionRow[]> 
 			.select(
 				`id, transaction_number, created_at, channel, sales_type, total, payment_status,
 				 change_amount, status, customer_name,
-				 payment_methods(name), marketplace_platforms(name),
+				 payment_methods(name), bank_accounts(bank_name), marketplace_platforms(name),
 				 transaction_items(item_type, product_name_snapshot, variant_name_snapshot, qty,
 				   package_choices_snapshot,
 				   transaction_item_addons(addon_name_snapshot, qty))`
