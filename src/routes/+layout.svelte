@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
 	import { auth } from '$lib/auth/auth.svelte';
+	import MenuSyncButton from '$lib/components/MenuSyncButton.svelte';
 	import './app.css';
 
 	let { children } = $props();
@@ -36,8 +37,17 @@
 {:else}
 	{#if auth.profile}
 		<header class="topbar">
-			<strong class="brand">Pizza Lezzato POS</strong>
+			<div class="left">
+				<strong class="brand">Pizza Lezzato POS</strong>
+				<nav>
+					<a href="/" class:active={page.url.pathname === '/'}>Kasir</a>
+					<a href="/transaksi" class:active={page.url.pathname === '/transaksi'}>Transaksi</a>
+				</nav>
+			</div>
 			<div class="who">
+				{#if auth.can('sync_menu')}
+					<MenuSyncButton />
+				{/if}
 				<span>{auth.profile.name}</span>
 				<span class="role">{auth.profile.role.name}</span>
 				<button class="btn-ghost" onclick={logout}>Keluar</button>
@@ -65,8 +75,33 @@
 		background: var(--surface);
 		border-bottom: 1px solid var(--border);
 	}
+	.left {
+		display: flex;
+		align-items: center;
+		gap: 1.5rem;
+	}
 	.brand {
 		color: var(--brand);
+	}
+	nav {
+		display: flex;
+		gap: 0.25rem;
+	}
+	nav a {
+		padding: 0.4rem 0.8rem;
+		border-radius: 8px;
+		color: var(--muted);
+		text-decoration: none;
+		font-weight: 600;
+	}
+	nav a.active {
+		background: var(--brand-soft);
+		color: var(--brand);
+	}
+	@media (max-width: 640px) {
+		.brand {
+			display: none;
+		}
 	}
 	.who {
 		display: flex;

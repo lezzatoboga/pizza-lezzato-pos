@@ -1,30 +1,712 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { auth } from '$lib/auth/auth.svelte';
+	import OpenShiftForm from '$lib/components/OpenShiftForm.svelte';
+	import PaymentDialog from '$lib/components/PaymentDialog.svelte';
+	import ProductDialog from '$lib/components/ProductDialog.svelte';
+	import { friendlyError, rupiah, timeOf } from '$lib/format';
+	import {
+		createTransaction,
+		loadContext,
+		loadMenu,
+		type PaymentResult,
+		type PosContext,
+		type TransactionPayload
+	} from '$lib/pos/data';
+	import { menuVersion } from '$lib/pos/menu-version.svelte';
+	import { applyMarkup, lineTotal } from '$lib/pos/pricing';
+	import type {
+		CartLine,
+		Channel,
+		Menu,
+		Product,
+		SalesType,
+		SavedTransaction
+	} from '$lib/pos/types';
+
+	let ctx = $state<PosContext | null>(null);
+	let menu = $state<Menu | null>(null);
+	let loadError = $state('');
+
+	// Menu
+	let category = $state('');
+	let search = $state('');
+	let picking = $state<Product | null>(null);
+
+	// Keranjang & detail pesanan
+	let lines = $state<CartLine[]>([]);
+	let channel = $state<Channel>('admin_toko');
+	let salesType = $state<SalesType>('dine_in');
+	let platformId = $state('');
+	let markupOverride = $state<string | null>(null);
+	let shippingInput = $state('');
+	let customerName = $state('');
+	let customerPhone = $state('');
+	let orderNotes = $state('');
+
+	let saving = $state(false);
+	let saveError = $state('');
+	let paying = $state<SavedTransaction | null>(null);
+	let toast = $state('');
+	let toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+	onMount(async () => {
+		try {
+			ctx = await loadContext();
+			platformId = ctx.platforms[0]?.id ?? '';
+		} catch (e) {
+			loadError = friendlyError(e);
+		}
+	});
+
+	// Muat (ulang) menu saat pertama kali dan setiap selesai sinkron manual.
+	$effect(() => {
+		void menuVersion.value;
+		loadMenu()
+			.then((m) => {
+				menu = m;
+				if (!categories.includes(category)) category = categories[0] ?? '';
+			})
+			.catch((e) => (loadError = friendlyError(e)));
+	});
+
+	const categories = $derived([...new Set((menu?.products ?? []).map((p) => p.category))]);
+
+	const visibleProducts = $derived.by(() => {
+		const products = menu?.products ?? [];
+		const q = search.trim().toLowerCase();
+		if (q) return products.filter((p) => p.name.toLowerCase().includes(q));
+		return products.filter((p) => p.category === category);
+	});
+
+	const platform = $derived(ctx?.platforms.find((p) => p.id === platformId) ?? null);
+	const markupPercent = $derived(
+		channel === 'marketplace'
+			? markupOverride !== null && markupOverride.trim() !== ''
+				? Number(markupOverride)
+				: (platform?.markup_percent ?? 0)
+			: 0
+	);
+	const markupValid = $derived(
+		Number.isFinite(markupPercent) && markupPercent >= 0 && markupPercent <= 999
+	);
+
+	const shippingAllowed = $derived(channel === 'admin_toko' && salesType === 'delivery');
+	const shipping = $derived(shippingAllowed ? Number(shippingInput.replace(/\D/g, '')) || 0 : 0);
+
+	function basePrice(line: CartLine) {
+		return line.variant?.price ?? line.product.base_price ?? 0;
+	}
+
+	function toppingUnitBase(line: CartLine) {
+		return line.variant ? (menu?.toppingPrices[line.variant.variant_key] ?? 0) : 0;
+	}
+
+	function priceOf(line: CartLine) {
+		const toppingBase = toppingUnitBase(line);
+		return lineTotal(
+			basePrice(line),
+			line.qty,
+			line.toppings.map((t) => ({ price: toppingBase, qty: t.qty })),
+			markupPercent
+		);
+	}
+
+	const subtotal = $derived(lines.reduce((sum, l) => sum + priceOf(l), 0));
+	const total = $derived(subtotal + shipping);
+
+	function formatCategory(slug: string) {
+		return slug.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+	}
+
+	function productFromPrice(p: Product) {
+		const prices = p.variants.length ? p.variants.map((v) => v.price) : [p.base_price ?? 0];
+		return applyMarkup(Math.min(...prices), markupPercent);
+	}
+
+	function lineSignature(line: Omit<CartLine, 'key'>) {
+		return JSON.stringify([
+			line.product.id,
+			line.variant?.id ?? null,
+			line.notes,
+			line.toppings.map((t) => [t.topping.id, t.qty]).sort()
+		]);
+	}
+
+	function addLine(line: Omit<CartLine, 'key'>) {
+		const signature = lineSignature(line);
+		const existing = lines.find((l) => lineSignature(l) === signature);
+		if (existing) existing.qty = Math.min(999, existing.qty + line.qty);
+		else lines.push({ ...line, key: crypto.randomUUID() });
+		picking = null;
+	}
+
+	function tapProduct(p: Product) {
+		if (p.kind === 'simple') {
+			addLine({ product: p, variant: null, qty: 1, notes: '', toppings: [] });
+		} else {
+			picking = p;
+		}
+	}
+
+	function changeQty(line: CartLine, delta: number) {
+		line.qty = Math.max(0, Math.min(999, line.qty + delta));
+		if (line.qty === 0) lines = lines.filter((l) => l !== line);
+	}
+
+	function selectChannel(next: Channel) {
+		channel = next;
+		markupOverride = null;
+		if (next === 'marketplace') salesType = 'delivery';
+	}
+
+	function resetOrder() {
+		lines = [];
+		shippingInput = '';
+		customerName = '';
+		customerPhone = '';
+		orderNotes = '';
+		markupOverride = null;
+		saveError = '';
+	}
+
+	function showToast(message: string) {
+		toast = message;
+		clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => (toast = ''), 5000);
+	}
+
+	async function save(payNow: boolean) {
+		if (!ctx || saving || lines.length === 0) return;
+		saving = true;
+		saveError = '';
+
+		const payload: TransactionPayload = {
+			outlet_id: ctx.outlet.id,
+			channel,
+			sales_type: channel === 'marketplace' ? 'delivery' : salesType,
+			shipping_cost: shipping,
+			customer_name: customerName,
+			customer_phone: customerPhone,
+			notes: orderNotes,
+			items: lines.map((l) => ({
+				product_id: l.product.id,
+				variant_id: l.variant?.id ?? null,
+				qty: l.qty,
+				notes: l.notes,
+				toppings: l.toppings.map((t) => ({ id: t.topping.id, qty: t.qty }))
+			}))
+		};
+		if (channel === 'marketplace') {
+			payload.marketplace_platform_id = platformId;
+			payload.markup_percent = markupPercent;
+		}
+
+		try {
+			const saved = await createTransaction(payload);
+			resetOrder();
+			if (payNow) paying = saved;
+			else
+				showToast(`${saved.transaction_number} tersimpan · belum dibayar · ${rupiah(saved.total)}`);
+		} catch (e) {
+			saveError = friendlyError(e);
+		} finally {
+			saving = false;
+		}
+	}
+
+	function onPaid(result: PaymentResult) {
+		paying = null;
+		showToast(
+			result.change_amount > 0
+				? `${result.transaction_number} lunas · kembalian ${rupiah(result.change_amount)}`
+				: `${result.transaction_number} lunas`
+		);
+	}
+
+	function onPaymentClosed() {
+		if (paying) showToast(`${paying.transaction_number} tersimpan · belum dibayar`);
+		paying = null;
+	}
 </script>
 
-<section class="home">
-	<h1>Halo, {auth.profile?.name}</h1>
-	<p>Login berhasil. Layar transaksi akan dibangun di tahap berikutnya.</p>
+{#if loadError}
+	<p class="page-error">{loadError}</p>
+{:else if !ctx}
+	<p class="page-status">Memuat…</p>
+{:else if !ctx.shift}
+	<OpenShiftForm outlet={ctx.outlet} onopened={(shift) => ctx && (ctx.shift = shift)} />
+{:else}
+	<div class="pos">
+		<!-- Menu -->
+		<section class="menu">
+			<div class="menu-top">
+				<input class="input search" placeholder="Cari menu…" bind:value={search} />
+				<span class="shift-info">Shift dibuka {timeOf(ctx.shift.opening_time)}</span>
+			</div>
 
-	<h2>Hak akses Anda</h2>
-	<ul>
-		{#each auth.profile?.permissions ?? [] as code (code)}
-			<li><code>{code}</code></li>
-		{:else}
-			<li>Tidak ada hak akses tambahan.</li>
-		{/each}
-	</ul>
-</section>
+			{#if !menu}
+				<p class="page-status">Memuat menu…</p>
+			{:else if menu.products.length === 0}
+				<div class="empty">
+					<p>Menu belum tersedia.</p>
+					<p class="muted">
+						{auth.can('sync_menu')
+							? 'Tekan "Sinkron menu" di atas untuk mengambil menu dari website.'
+							: 'Minta Owner menekan "Sinkron menu".'}
+					</p>
+				</div>
+			{:else}
+				{#if !search.trim()}
+					<div class="tabs">
+						{#each categories as c (c)}
+							<button class:selected={c === category} onclick={() => (category = c)}>
+								{formatCategory(c)}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				<div class="grid">
+					{#each visibleProducts as p (p.id)}
+						<button class="product" onclick={() => tapProduct(p)}>
+							<span class="name">{p.name}</span>
+							<span class="price">
+								{p.variants.length > 1 ? 'mulai ' : ''}{rupiah(productFromPrice(p))}
+							</span>
+						</button>
+					{:else}
+						<p class="muted">Tidak ada menu yang cocok.</p>
+					{/each}
+				</div>
+			{/if}
+		</section>
+
+		<!-- Keranjang -->
+		<aside class="cart">
+			<div class="segmented">
+				<button
+					class:selected={channel === 'admin_toko'}
+					onclick={() => selectChannel('admin_toko')}
+				>
+					Admin toko
+				</button>
+				<button
+					class:selected={channel === 'marketplace'}
+					onclick={() => selectChannel('marketplace')}
+				>
+					Marketplace
+				</button>
+			</div>
+
+			{#if channel === 'admin_toko'}
+				<div class="segmented">
+					<button class:selected={salesType === 'dine_in'} onclick={() => (salesType = 'dine_in')}
+						>Dine-in</button
+					>
+					<button
+						class:selected={salesType === 'take_away'}
+						onclick={() => (salesType = 'take_away')}>Take away</button
+					>
+					<button class:selected={salesType === 'delivery'} onclick={() => (salesType = 'delivery')}
+						>Delivery</button
+					>
+				</div>
+			{:else}
+				<div class="segmented">
+					{#each ctx.platforms as p (p.id)}
+						<button
+							class:selected={p.id === platformId}
+							onclick={() => {
+								platformId = p.id;
+								markupOverride = null;
+							}}>{p.name}</button
+						>
+					{/each}
+				</div>
+				<div class="markup">
+					{#if markupOverride === null}
+						<span>Markup {platform?.markup_percent ?? 0}% · Delivery</span>
+						{#if auth.can('override_markup')}
+							<button
+								class="link"
+								onclick={() => (markupOverride = String(platform?.markup_percent ?? 0))}
+							>
+								Ubah
+							</button>
+						{/if}
+					{:else}
+						<label>
+							Markup khusus transaksi ini (%)
+							<input class="input small" inputmode="decimal" bind:value={markupOverride} />
+						</label>
+						<button class="link" onclick={() => (markupOverride = null)}>Batal</button>
+					{/if}
+				</div>
+			{/if}
+
+			<div class="customer">
+				<input
+					class="input"
+					placeholder="Nama customer (opsional)"
+					bind:value={customerName}
+					maxlength="80"
+				/>
+				{#if salesType === 'delivery' || channel === 'marketplace'}
+					<input
+						class="input"
+						placeholder="No. HP (opsional)"
+						inputmode="tel"
+						bind:value={customerPhone}
+						maxlength="20"
+					/>
+				{/if}
+			</div>
+
+			<ul class="lines">
+				{#each lines as line (line.key)}
+					<li>
+						<div class="line-info">
+							<strong>{line.product.name}</strong>
+							{#if line.variant}<span class="muted"> · {line.variant.label}</span>{/if}
+							{#each line.toppings as t (t.topping.id)}
+								<div class="sub">+ {t.topping.name}{t.qty > 1 ? ` ×${t.qty}` : ''}</div>
+							{/each}
+							{#if line.notes}<div class="sub note">“{line.notes}”</div>{/if}
+						</div>
+						<div class="line-side">
+							<span class="line-price">{rupiah(priceOf(line))}</span>
+							<div class="stepper">
+								<button onclick={() => changeQty(line, -1)} aria-label="Kurangi">−</button>
+								<span>{line.qty}</span>
+								<button onclick={() => changeQty(line, 1)} aria-label="Tambah">+</button>
+							</div>
+						</div>
+					</li>
+				{:else}
+					<li class="empty-cart">Belum ada item. Pilih menu di sebelah kiri.</li>
+				{/each}
+			</ul>
+
+			<input
+				class="input"
+				placeholder="Catatan pesanan (opsional)"
+				bind:value={orderNotes}
+				maxlength="200"
+			/>
+
+			<dl class="totals">
+				<dt>Subtotal</dt>
+				<dd>{rupiah(subtotal)}</dd>
+				{#if shippingAllowed}
+					<dt>Ongkir</dt>
+					<dd>
+						<input
+							class="input small"
+							inputmode="numeric"
+							placeholder="0"
+							value={shipping ? shipping.toLocaleString('id-ID') : ''}
+							oninput={(e) => (shippingInput = e.currentTarget.value)}
+						/>
+					</dd>
+				{/if}
+				<dt class="grand">Total</dt>
+				<dd class="grand">{rupiah(total)}</dd>
+			</dl>
+
+			<p class="error" role="alert">
+				{saveError || (!markupValid ? 'Markup tidak valid' : '')}
+			</p>
+
+			<div class="actions">
+				<button
+					class="btn-ghost"
+					onclick={() => save(false)}
+					disabled={saving || lines.length === 0 || !markupValid}
+				>
+					Simpan
+				</button>
+				<button
+					class="btn-primary"
+					onclick={() => save(true)}
+					disabled={saving || lines.length === 0 || !markupValid}
+				>
+					{saving ? 'Menyimpan…' : `Bayar ${rupiah(total)}`}
+				</button>
+			</div>
+		</aside>
+	</div>
+{/if}
+
+{#if picking && menu}
+	<ProductDialog
+		product={picking}
+		{menu}
+		{markupPercent}
+		onadd={addLine}
+		onclose={() => (picking = null)}
+	/>
+{/if}
+
+{#if paying && ctx}
+	<PaymentDialog
+		transaction={paying}
+		methods={ctx.paymentMethods}
+		ondone={onPaid}
+		onclose={onPaymentClosed}
+	/>
+{/if}
+
+{#if toast}
+	<div class="toast" role="status">{toast}</div>
+{/if}
 
 <style>
-	.home {
-		max-width: 720px;
-		margin: 2rem auto;
-		padding: 0 1rem;
-	}
-	h2 {
-		font-size: 1rem;
-		margin-top: 2rem;
+	.page-status,
+	.page-error {
+		text-align: center;
+		margin-top: 3rem;
 		color: var(--muted);
+	}
+	.page-error {
+		color: var(--danger);
+	}
+	.muted {
+		color: var(--muted);
+	}
+	.pos {
+		display: grid;
+		grid-template-columns: 1fr 380px;
+		height: calc(100dvh - 57px);
+	}
+	.menu {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		padding: 1rem;
+		overflow: hidden;
+	}
+	.menu-top {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+	.search {
+		max-width: 320px;
+	}
+	.shift-info {
+		margin-left: auto;
+		font-size: 0.85rem;
+		color: var(--muted);
+		white-space: nowrap;
+	}
+	.tabs {
+		display: flex;
+		gap: 0.5rem;
+		overflow-x: auto;
+		padding-bottom: 0.25rem;
+	}
+	.tabs button {
+		flex: none;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: var(--surface);
+		padding: 0.45rem 1rem;
+		font-weight: 600;
+		color: var(--muted);
+	}
+	.tabs button.selected {
+		border-color: var(--brand);
+		background: var(--brand);
+		color: #fff;
+	}
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+		gap: 0.75rem;
+		align-content: start;
+		overflow-y: auto;
+		padding-bottom: 1rem;
+	}
+	.product {
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		gap: 0.5rem;
+		min-height: 96px;
+		padding: 0.85rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+		text-align: left;
+	}
+	.product:active {
+		background: var(--brand-soft);
+	}
+	.product .name {
+		font-weight: 600;
+	}
+	.product .price {
+		color: var(--brand);
+		font-size: 0.9rem;
+	}
+	.empty {
+		margin: 3rem auto;
+		text-align: center;
+	}
+	.cart {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		padding: 1rem;
+		background: var(--surface);
+		border-left: 1px solid var(--border);
+		overflow-y: auto;
+	}
+	.markup {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		font-size: 0.9rem;
+		color: var(--muted);
+	}
+	.markup label {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.link {
+		border: none;
+		background: none;
+		color: var(--brand);
+		font-weight: 600;
+		padding: 0.25rem;
+	}
+	.customer {
+		display: flex;
+		gap: 0.5rem;
+	}
+	.input.small {
+		width: 7rem;
+		padding: 0.4rem 0.6rem;
+		text-align: right;
+	}
+	.lines {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		flex: 1;
+		min-height: 120px;
+	}
+	.lines li {
+		display: flex;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding: 0.6rem 0;
+		border-bottom: 1px solid var(--border);
+	}
+	.lines .empty-cart {
+		justify-content: center;
+		color: var(--muted);
+		border: none;
+		padding: 2rem 0;
+		text-align: center;
+	}
+	.sub {
+		font-size: 0.85rem;
+		color: var(--muted);
+	}
+	.note {
+		font-style: italic;
+	}
+	.line-side {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 0.35rem;
+	}
+	.line-price {
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.stepper {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+	.stepper button {
+		width: 30px;
+		height: 30px;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		background: var(--surface);
+	}
+	.stepper span {
+		min-width: 2ch;
+		text-align: center;
+		font-weight: 600;
+	}
+	.totals {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		align-items: center;
+		gap: 0.35rem 1rem;
+		margin: 0.25rem 0 0;
+	}
+	.totals dt {
+		color: var(--muted);
+	}
+	.totals dd {
+		margin: 0;
+		text-align: right;
+	}
+	.totals .grand {
+		font-size: 1.25rem;
+		font-weight: 700;
+		color: var(--text);
+	}
+	.error {
+		color: var(--danger);
+		min-height: 1.2em;
+		margin: 0;
+		font-size: 0.9rem;
+	}
+	.actions {
+		display: grid;
+		grid-template-columns: 1fr 2fr;
+		gap: 0.5rem;
+	}
+	.actions button {
+		padding: 0.9rem;
+	}
+	.toast {
+		position: fixed;
+		left: 50%;
+		bottom: 1.5rem;
+		transform: translateX(-50%);
+		z-index: 60;
+		max-width: calc(100vw - 2rem);
+		padding: 0.8rem 1.2rem;
+		border-radius: var(--radius);
+		background: var(--text);
+		color: #fff;
+		box-shadow: 0 6px 20px rgb(0 0 0 / 0.2);
+	}
+	@media (max-width: 900px) {
+		.pos {
+			grid-template-columns: 1fr;
+			height: auto;
+		}
+		.menu {
+			overflow: visible;
+		}
+		.grid {
+			overflow: visible;
+		}
+		.cart {
+			border-left: none;
+			border-top: 1px solid var(--border);
+		}
 	}
 </style>
