@@ -530,6 +530,44 @@
 				</div>
 			{/if}
 
+			<ul class="lines">
+				{#each lines as line (line.key)}
+					<li>
+						<div class="line-info">
+							<strong>{line.product.name}</strong>
+							{#if line.variant}<span class="muted"> · {line.variant.label}</span>{/if}
+							{#each line.toppings as t (t.topping.id)}
+								<div class="sub">+ {t.topping.name}{t.qty > 1 ? ` ×${t.qty}` : ''}</div>
+							{/each}
+							{#each line.choices as c (c.key)}
+								<div class="sub">{c.label}: <strong>{c.value}</strong></div>
+							{/each}
+							{#if line.product.package_note}
+								<div class="sub">{line.product.package_note}</div>
+							{/if}
+							{#if line.notes}<div class="sub note">“{line.notes}”</div>{/if}
+						</div>
+						<div class="line-side">
+							<span class="line-price">{rupiah(priceOf(line))}</span>
+							<div class="stepper">
+								<button onclick={() => changeQty(line, -1)} aria-label="Kurangi">−</button>
+								<span class="count">{line.qty}</span>
+								<button onclick={() => changeQty(line, 1)} aria-label="Tambah">+</button>
+							</div>
+						</div>
+					</li>
+				{:else}
+					<li class="empty-cart">Belum ada item. Pilih menu di sebelah kiri.</li>
+				{/each}
+			</ul>
+
+			<input
+				class="input"
+				placeholder="Catatan pesanan (opsional)"
+				bind:value={orderNotes}
+				maxlength="200"
+			/>
+
 			{#if isDelivery}
 				<div class="block">
 					<div class="block-head">
@@ -576,44 +614,6 @@
 					<CourierPicker bind:value={courier} couriers={ctx.couriers} staff={ctx.staff} />
 				</div>
 			{/if}
-
-			<ul class="lines">
-				{#each lines as line (line.key)}
-					<li>
-						<div class="line-info">
-							<strong>{line.product.name}</strong>
-							{#if line.variant}<span class="muted"> · {line.variant.label}</span>{/if}
-							{#each line.toppings as t (t.topping.id)}
-								<div class="sub">+ {t.topping.name}{t.qty > 1 ? ` ×${t.qty}` : ''}</div>
-							{/each}
-							{#each line.choices as c (c.key)}
-								<div class="sub">{c.label}: <strong>{c.value}</strong></div>
-							{/each}
-							{#if line.product.package_note}
-								<div class="sub">{line.product.package_note}</div>
-							{/if}
-							{#if line.notes}<div class="sub note">“{line.notes}”</div>{/if}
-						</div>
-						<div class="line-side">
-							<span class="line-price">{rupiah(priceOf(line))}</span>
-							<div class="stepper">
-								<button onclick={() => changeQty(line, -1)} aria-label="Kurangi">−</button>
-								<span class="count">{line.qty}</span>
-								<button onclick={() => changeQty(line, 1)} aria-label="Tambah">+</button>
-							</div>
-						</div>
-					</li>
-				{:else}
-					<li class="empty-cart">Belum ada item. Pilih menu di sebelah kiri.</li>
-				{/each}
-			</ul>
-
-			<input
-				class="input"
-				placeholder="Catatan pesanan (opsional)"
-				bind:value={orderNotes}
-				maxlength="200"
-			/>
 
 			{#if channel === 'admin_toko'}
 				{#if !discountOn}
