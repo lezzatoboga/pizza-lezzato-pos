@@ -1,0 +1,59 @@
+:root {
+	--brand: #c0392b;
+	--brand-strong: #a93226;
+	--brand-soft: #fbeae8;
+	--bg: #f6f4f1;
+	--surface: #ffffff;
+	--text: #1f1b18;
+	--muted: #6f6660;
+	--border: #e4ded8;
+	--danger: #b3261e;
+	--radius: 12px;
+	color-scheme: light;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font-family:
+		system-ui,
+		-apple-system,
+		'Segoe UI',
+		Roboto,
+		sans-serif;
+	-webkit-tap-highlight-color: transparent;
+}
+
+button {
+	font: inherit;
+	cursor: pointer;
+}
+
+.btn-primary {
+	border: none;
+	border-radius: var(--radius);
+	background: var(--brand);
+	color: #fff;
+	padding: 0.85rem 1.25rem;
+	font-weight: 600;
+}
+.btn-primary:hover:not(:disabled) {
+	background: var(--brand-strong);
+}
+.btn-primary:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.btn-ghost {
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+	color: var(--text);
+	padding: 0.5rem 0.9rem;
+}
