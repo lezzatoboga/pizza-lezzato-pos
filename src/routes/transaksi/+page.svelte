@@ -85,7 +85,10 @@
 								<span>
 									{item.qty}× {item.product_name_snapshot}{item.variant_name_snapshot
 										? ` (${item.variant_name_snapshot})`
-										: ''}{#each item.transaction_item_addons as a, j (j)}
+										: ''}{#if item.package_choices_snapshot?.length}
+										— {item.package_choices_snapshot
+											.map((c) => c.value)
+											.join(', ')}{/if}{#each item.transaction_item_addons as a, j (j)}
 										+ {a.addon_name_snapshot}{a.qty > 1 ? ` ×${a.qty}` : ''}{/each}
 								</span>
 							{/each}

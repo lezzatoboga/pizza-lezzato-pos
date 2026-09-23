@@ -1,7 +1,9 @@
 import { supabase } from '$lib/supabase/client';
 import type {
+	ChosenOption,
 	Menu,
 	Outlet,
+	PackageChoiceGroup,
 	PaymentMethod,
 	Platform,
 	Product,
@@ -15,13 +17,31 @@ function unwrap<T>(result: { data: T | null; error: { message: string } | null }
 	return result.data as T;
 }
 
+type PackageRow = {
+	id: string;
+	name: string;
+	category_slug: string | null;
+	section_key: string | null;
+	base_price: number;
+	package_items: string[] | null;
+	package_choices: PackageChoiceGroup[] | null;
+	package_note: string | null;
+	sort_order: number;
+};
+
 export async function loadMenu(): Promise<Menu> {
 	// Urutan kategori/section/produk disusun di menu-order.ts; varian & topping
 	// cukup diurutkan sort_order masing-masing di sini.
-	const [products, variants, toppings, prices, categories, sections] = await Promise.all([
+	const [products, packages, variants, toppings, prices, categories, sections] = await Promise.all([
 		supabase
 			.from('products_cache')
 			.select('id, name, category, section_key, kind, base_price, sort_order')
+			.eq('active', true),
+		supabase
+			.from('packages_cache')
+			.select(
+				'id, name, category_slug, section_key, base_price, package_items, package_choices, package_note, sort_order'
+			)
 			.eq('active', true),
 		supabase
 			.from('product_variants_cache')
@@ -49,10 +69,25 @@ export async function loadMenu(): Promise<Menu> {
 	return {
 		categories: unwrap(categories),
 		sections: unwrap(sections),
-		products: (unwrap(products) as Omit<Product, 'variants'>[]).map((p) => ({
-			...p,
-			variants: variantsByProduct.get(p.id) ?? []
-		})),
+		products: [
+			...(unwrap(products) as Omit<Product, 'variants'>[]).map((p) => ({
+				...p,
+				variants: variantsByProduct.get(p.id) ?? []
+			})),
+			...(unwrap(packages) as PackageRow[]).map((p): Product => ({
+				id: p.id,
+				name: p.name,
+				category: p.category_slug ?? 'paket',
+				section_key: p.section_key,
+				kind: 'package',
+				base_price: p.base_price,
+				sort_order: p.sort_order,
+				variants: [],
+				package_items: p.package_items ?? [],
+				package_choices: p.package_choices ?? [],
+				package_note: p.package_note
+			}))
+		],
 		toppings: unwrap(toppings),
 		toppingPrices: Object.fromEntries(
 			(unwrap(prices) as { variant_key: string; price: number }[]).map((p) => [
@@ -131,11 +166,14 @@ export type TransactionPayload = {
 	customer_phone?: string;
 	notes?: string;
 	items: {
+		item_type: 'product' | 'package';
 		product_id: string;
 		variant_id: string | null;
 		qty: number;
 		notes?: string;
 		toppings: { id: string; qty: number }[];
+		// Paket: { [choice key]: opsi terpilih }
+		choices?: Record<string, string>;
 	}[];
 };
 
@@ -175,9 +213,11 @@ export type TransactionRow = {
 	payment_methods: { name: string } | null;
 	marketplace_platforms: { name: string } | null;
 	transaction_items: {
+		item_type: 'product' | 'package';
 		product_name_snapshot: string;
 		variant_name_snapshot: string | null;
 		qty: number;
+		package_choices_snapshot: ChosenOption[] | null;
 		transaction_item_addons: { addon_name_snapshot: string; qty: number }[];
 	}[];
 };
@@ -190,7 +230,8 @@ export async function loadTransactions(date: string): Promise<TransactionRow[]> 
 				`id, transaction_number, created_at, channel, sales_type, total, payment_status,
 				 change_amount, status, customer_name,
 				 payment_methods(name), marketplace_platforms(name),
-				 transaction_items(product_name_snapshot, variant_name_snapshot, qty,
+				 transaction_items(item_type, product_name_snapshot, variant_name_snapshot, qty,
+				   package_choices_snapshot,
 				   transaction_item_addons(addon_name_snapshot, qty))`
 			)
 			.eq('transaction_date', date)
@@ -213,6 +254,7 @@ export async function lastMenuSync(): Promise<MenuSyncRun | null> {
 
 export async function syncMenuNow(): Promise<{
 	products: number;
+	packages: number;
 	variants: number;
 	toppings: number;
 }> {

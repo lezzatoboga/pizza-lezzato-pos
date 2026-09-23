@@ -47,10 +47,12 @@ Deno.serve(async (req) => {
 	try {
 		const web = websiteClient();
 		const [products, variants, toppings, toppingPrices, categories, sections] = await Promise.all([
+			// Termasuk paket (kind = 'package'); dipisah di apply_menu_sync.
 			web
 				.from('menu_items')
-				.select('id, name, category_slug, section_key, kind, base_price, active, sort_order')
-				.neq('kind', 'package'),
+				.select(
+					'id, name, category_slug, section_key, kind, base_price, active, sort_order, package_items, package_choices, package_note'
+				),
 			web.from('menu_item_variants').select('id, menu_item_id, variant_key, label, price, sort_order'),
 			web.from('xtratopping').select('id, name, active, sort_order'),
 			web.from('xtratopping_price').select('variant_key, price'),

@@ -54,7 +54,8 @@
 			variant,
 			qty,
 			notes: notes.trim(),
-			toppings: allowToppings ? chosenToppings : []
+			toppings: allowToppings ? chosenToppings : [],
+			choices: []
 		});
 	}
 </script>

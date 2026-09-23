@@ -29,7 +29,7 @@
 		showDetail = false;
 		try {
 			const result = await syncMenuNow();
-			message = `${result.products} produk, ${result.toppings} topping`;
+			message = `${result.products} produk, ${result.packages} paket, ${result.toppings} topping`;
 			menuVersion.bump();
 		} catch (e) {
 			failedMessage = friendlyError(e);

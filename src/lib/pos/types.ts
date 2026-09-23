@@ -1,4 +1,9 @@
-export type ProductKind = 'sized' | 'simple' | 'variant';
+// 'package' = paket dari packages_cache; tampil di grid menu yang sama.
+export type ProductKind = 'sized' | 'simple' | 'variant' | 'package';
+
+export type PackageChoiceGroup = { key: string; label: string; options: string[] };
+
+export type ChosenOption = { key: string; label: string; value: string };
 
 export type Variant = {
 	id: string;
@@ -18,6 +23,10 @@ export type Product = {
 	base_price: number | null;
 	sort_order: number;
 	variants: Variant[];
+	// Hanya untuk kind = 'package'
+	package_items?: string[];
+	package_choices?: PackageChoiceGroup[];
+	package_note?: string | null;
 };
 
 export type Topping = { id: string; name: string; sort_order: number };
@@ -76,6 +85,8 @@ export type CartLine = {
 	qty: number;
 	notes: string;
 	toppings: { topping: Topping; qty: number }[];
+	// Pilihan paket (kosong untuk produk biasa)
+	choices: ChosenOption[];
 };
 
 // Ringkasan transaksi yang dikembalikan RPC create_transaction.

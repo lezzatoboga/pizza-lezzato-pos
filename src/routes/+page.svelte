@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/auth/auth.svelte';
 	import OpenShiftForm from '$lib/components/OpenShiftForm.svelte';
+	import PackageDialog from '$lib/components/PackageDialog.svelte';
 	import PaymentDialog from '$lib/components/PaymentDialog.svelte';
 	import ProductDialog from '$lib/components/ProductDialog.svelte';
 	import { friendlyError, rupiah, timeOf } from '$lib/format';
@@ -131,7 +132,8 @@
 			line.product.id,
 			line.variant?.id ?? null,
 			line.notes,
-			line.toppings.map((t) => [t.topping.id, t.qty]).sort()
+			line.toppings.map((t) => [t.topping.id, t.qty]).sort(),
+			line.choices.map((c) => [c.key, c.value])
 		]);
 	}
 
@@ -143,11 +145,14 @@
 		picking = null;
 	}
 
+	// Produk simple & paket tanpa pilihan: langsung masuk keranjang sekali ketuk.
 	function tapProduct(p: Product) {
-		if (p.kind === 'simple') {
-			addLine({ product: p, variant: null, qty: 1, notes: '', toppings: [] });
-		} else {
+		const needsDialog =
+			p.kind === 'package' ? (p.package_choices ?? []).length > 0 : p.kind !== 'simple';
+		if (needsDialog) {
 			picking = p;
+		} else {
+			addLine({ product: p, variant: null, qty: 1, notes: '', toppings: [], choices: [] });
 		}
 	}
 
@@ -192,11 +197,13 @@
 			customer_phone: customerPhone,
 			notes: orderNotes,
 			items: lines.map((l) => ({
+				item_type: l.product.kind === 'package' ? ('package' as const) : ('product' as const),
 				product_id: l.product.id,
 				variant_id: l.variant?.id ?? null,
 				qty: l.qty,
 				notes: l.notes,
-				toppings: l.toppings.map((t) => ({ id: t.topping.id, qty: t.qty }))
+				toppings: l.toppings.map((t) => ({ id: t.topping.id, qty: t.qty })),
+				choices: Object.fromEntries(l.choices.map((c) => [c.key, c.value]))
 			}))
 		};
 		if (channel === 'marketplace') {
@@ -276,6 +283,9 @@
 							{#each s.products as p (p.id)}
 								<button class="product" onclick={() => tapProduct(p)}>
 									<span class="name">{p.name}</span>
+									{#if p.kind === 'package'}
+										<span class="contents">{(p.package_items ?? []).join(' · ')}</span>
+									{/if}
 									<span class="price">
 										{p.variants.length > 1 ? 'mulai ' : ''}{rupiah(productFromPrice(p))}
 									</span>
@@ -379,6 +389,12 @@
 							{#each line.toppings as t (t.topping.id)}
 								<div class="sub">+ {t.topping.name}{t.qty > 1 ? ` ×${t.qty}` : ''}</div>
 							{/each}
+							{#each line.choices as c (c.key)}
+								<div class="sub">{c.label}: <strong>{c.value}</strong></div>
+							{/each}
+							{#if line.product.package_note}
+								<div class="sub">{line.product.package_note}</div>
+							{/if}
 							{#if line.notes}<div class="sub note">“{line.notes}”</div>{/if}
 						</div>
 						<div class="line-side">
@@ -445,7 +461,9 @@
 	</div>
 {/if}
 
-{#if picking && menu}
+{#if picking && picking.kind === 'package'}
+	<PackageDialog pkg={picking} {markupPercent} onadd={addLine} onclose={() => (picking = null)} />
+{:else if picking && menu}
 	<ProductDialog
 		product={picking}
 		{menu}
@@ -566,6 +584,11 @@
 	}
 	.product .name {
 		font-weight: 600;
+	}
+	.product .contents {
+		font-size: 0.8rem;
+		color: var(--muted);
+		line-height: 1.3;
 	}
 	.product .price {
 		color: var(--brand);
