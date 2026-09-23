@@ -203,7 +203,7 @@
 		border-radius: var(--radius);
 		background: var(--surface);
 	}
-	.user:hover {
+	.user:active {
 		border-color: var(--brand);
 		background: var(--brand-soft);
 	}
@@ -227,8 +227,7 @@
 	}
 	.back {
 		float: left;
-		padding: 0.35rem 0.7rem;
-		font-size: 0.85rem;
+		font-size: 0.9rem;
 	}
 	.dots {
 		clear: both;

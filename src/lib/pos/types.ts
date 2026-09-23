@@ -13,6 +13,7 @@ export type Product = {
 	id: string;
 	name: string;
 	category: string;
+	section_key: string | null;
 	kind: ProductKind;
 	base_price: number | null;
 	sort_order: number;
@@ -21,7 +22,18 @@ export type Product = {
 
 export type Topping = { id: string; name: string; sort_order: number };
 
+export type MenuCategory = { slug: string; label: string; sort_order: number };
+
+export type MenuSection = {
+	key: string;
+	category_slug: string;
+	label: string;
+	sort_order: number;
+};
+
 export type Menu = {
+	categories: MenuCategory[];
+	sections: MenuSection[];
 	products: Product[];
 	toppings: Topping[];
 	toppingPrices: Record<string, number>;

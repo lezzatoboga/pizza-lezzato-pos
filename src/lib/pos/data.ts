@@ -16,22 +16,27 @@ function unwrap<T>(result: { data: T | null; error: { message: string } | null }
 }
 
 export async function loadMenu(): Promise<Menu> {
-	const [products, variants, toppings, prices] = await Promise.all([
+	// Urutan kategori/section/produk disusun di menu-order.ts; varian & topping
+	// cukup diurutkan sort_order masing-masing di sini.
+	const [products, variants, toppings, prices, categories, sections] = await Promise.all([
 		supabase
 			.from('products_cache')
-			.select('id, name, category, kind, base_price, sort_order')
-			.eq('active', true)
-			.order('sort_order'),
+			.select('id, name, category, section_key, kind, base_price, sort_order')
+			.eq('active', true),
 		supabase
 			.from('product_variants_cache')
 			.select('id, product_id, variant_key, label, price, sort_order')
-			.order('sort_order'),
+			.order('sort_order')
+			.order('label'),
 		supabase
 			.from('xtratopping_cache')
 			.select('id, name, sort_order')
 			.eq('active', true)
-			.order('sort_order'),
-		supabase.from('xtratopping_price_cache').select('variant_key, price')
+			.order('sort_order')
+			.order('name'),
+		supabase.from('xtratopping_price_cache').select('variant_key, price'),
+		supabase.from('menu_categories_cache').select('slug, label, sort_order'),
+		supabase.from('menu_sections_cache').select('key, category_slug, label, sort_order')
 	]);
 
 	const variantsByProduct = new Map<string, Variant[]>();
@@ -42,6 +47,8 @@ export async function loadMenu(): Promise<Menu> {
 	}
 
 	return {
+		categories: unwrap(categories),
+		sections: unwrap(sections),
 		products: (unwrap(products) as Omit<Product, 'variants'>[]).map((p) => ({
 			...p,
 			variants: variantsByProduct.get(p.id) ?? []

@@ -158,8 +158,10 @@
 	.option {
 		display: flex;
 		flex-direction: column;
+		justify-content: center;
 		gap: 0.2rem;
-		padding: 0.75rem;
+		min-height: 60px;
+		padding: 0.5rem 0.75rem;
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		background: var(--surface);
@@ -173,42 +175,26 @@
 		background: var(--brand-soft);
 		box-shadow: inset 0 0 0 1px var(--brand);
 	}
+	/* Dua kolom supaya muat di layar landscape tanpa banyak menggulir */
 	.toppings {
 		list-style: none;
 		margin: 0;
 		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+		column-gap: 1.25rem;
 	}
 	.toppings li {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0.4rem 0;
+		gap: 0.5rem;
+		padding: 0.3rem 0;
 		border-bottom: 1px solid var(--border);
 	}
-	.stepper {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-	.stepper button {
-		width: 36px;
-		height: 36px;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		background: var(--surface);
-		font-size: 1.1rem;
-	}
-	.stepper button:disabled {
-		opacity: 0.35;
-	}
 	.stepper.big button {
-		width: 48px;
-		height: 48px;
-	}
-	.count {
-		min-width: 2ch;
-		text-align: center;
-		font-weight: 600;
+		width: var(--touch-lg);
+		height: var(--touch-lg);
 	}
 	.warn {
 		color: var(--danger);
@@ -216,6 +202,7 @@
 	}
 	.add {
 		width: 100%;
+		min-height: 56px;
 		font-size: 1.05rem;
 	}
 </style>

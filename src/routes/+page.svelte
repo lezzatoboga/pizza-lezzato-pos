@@ -14,6 +14,7 @@
 		type TransactionPayload
 	} from '$lib/pos/data';
 	import { menuVersion } from '$lib/pos/menu-version.svelte';
+	import { groupMenu, type MenuSectionGroup } from '$lib/pos/menu-order';
 	import { applyMarkup, lineTotal } from '$lib/pos/pricing';
 	import type {
 		CartLine,
@@ -65,18 +66,23 @@
 		loadMenu()
 			.then((m) => {
 				menu = m;
-				if (!categories.includes(category)) category = categories[0] ?? '';
+				if (!groups.some((g) => g.slug === category)) category = groups[0]?.slug ?? '';
 			})
 			.catch((e) => (loadError = friendlyError(e)));
 	});
 
-	const categories = $derived([...new Set((menu?.products ?? []).map((p) => p.category))]);
+	// Urutan sama dengan /menu website: kategori → section → produk.
+	const groups = $derived(menu ? groupMenu(menu) : []);
 
-	const visibleProducts = $derived.by(() => {
-		const products = menu?.products ?? [];
+	const visibleSections = $derived.by((): MenuSectionGroup[] => {
 		const q = search.trim().toLowerCase();
-		if (q) return products.filter((p) => p.name.toLowerCase().includes(q));
-		return products.filter((p) => p.category === category);
+		if (q) {
+			const products = groups
+				.flatMap((g) => g.sections.flatMap((s) => s.products))
+				.filter((p) => p.name.toLowerCase().includes(q));
+			return [{ key: null, label: null, products }];
+		}
+		return groups.find((g) => g.slug === category)?.sections ?? [];
 	});
 
 	const platform = $derived(ctx?.platforms.find((p) => p.id === platformId) ?? null);
@@ -114,10 +120,6 @@
 
 	const subtotal = $derived(lines.reduce((sum, l) => sum + priceOf(l), 0));
 	const total = $derived(subtotal + shipping);
-
-	function formatCategory(slug: string) {
-		return slug.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-	}
 
 	function productFromPrice(p: Product) {
 		const prices = p.variants.length ? p.variants.map((v) => v.price) : [p.base_price ?? 0];
@@ -259,24 +261,29 @@
 			{:else}
 				{#if !search.trim()}
 					<div class="tabs">
-						{#each categories as c (c)}
-							<button class:selected={c === category} onclick={() => (category = c)}>
-								{formatCategory(c)}
+						{#each groups as g (g.slug)}
+							<button class:selected={g.slug === category} onclick={() => (category = g.slug)}>
+								{g.label}
 							</button>
 						{/each}
 					</div>
 				{/if}
 
-				<div class="grid">
-					{#each visibleProducts as p (p.id)}
-						<button class="product" onclick={() => tapProduct(p)}>
-							<span class="name">{p.name}</span>
-							<span class="price">
-								{p.variants.length > 1 ? 'mulai ' : ''}{rupiah(productFromPrice(p))}
-							</span>
-						</button>
-					{:else}
-						<p class="muted">Tidak ada menu yang cocok.</p>
+				<div class="products">
+					{#each visibleSections as s (s.key)}
+						{#if s.label}<h3 class="section-title">{s.label}</h3>{/if}
+						<div class="grid">
+							{#each s.products as p (p.id)}
+								<button class="product" onclick={() => tapProduct(p)}>
+									<span class="name">{p.name}</span>
+									<span class="price">
+										{p.variants.length > 1 ? 'mulai ' : ''}{rupiah(productFromPrice(p))}
+									</span>
+								</button>
+							{:else}
+								<p class="muted">Tidak ada menu yang cocok.</p>
+							{/each}
+						</div>
 					{/each}
 				</div>
 			{/if}
@@ -378,7 +385,7 @@
 							<span class="line-price">{rupiah(priceOf(line))}</span>
 							<div class="stepper">
 								<button onclick={() => changeQty(line, -1)} aria-label="Kurangi">−</button>
-								<span>{line.qty}</span>
+								<span class="count">{line.qty}</span>
 								<button onclick={() => changeQty(line, 1)} aria-label="Tambah">+</button>
 							</div>
 						</div>
@@ -474,10 +481,11 @@
 	.muted {
 		color: var(--muted);
 	}
+	/* Landscape tablet: menu kiri, keranjang kanan, masing-masing bergulir sendiri */
 	.pos {
 		display: grid;
-		grid-template-columns: 1fr 380px;
-		height: calc(100dvh - 57px);
+		grid-template-columns: 1fr minmax(340px, 34%);
+		height: calc(100dvh - var(--topbar-h));
 	}
 	.menu {
 		display: flex;
@@ -508,10 +516,11 @@
 	}
 	.tabs button {
 		flex: none;
+		min-height: var(--touch-lg);
 		border: 1px solid var(--border);
 		border-radius: 999px;
 		background: var(--surface);
-		padding: 0.45rem 1rem;
+		padding: 0 1.1rem;
 		font-weight: 600;
 		color: var(--muted);
 	}
@@ -520,13 +529,25 @@
 		background: var(--brand);
 		color: #fff;
 	}
+	.products {
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
+		padding-bottom: 1rem;
+	}
+	.section-title {
+		margin: 0.75rem 0 0.5rem;
+		font-size: 0.95rem;
+		color: var(--muted);
+	}
+	.section-title:first-child {
+		margin-top: 0;
+	}
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 		gap: 0.75rem;
 		align-content: start;
-		overflow-y: auto;
-		padding-bottom: 1rem;
 	}
 	.product {
 		display: flex;
@@ -576,20 +597,12 @@
 		align-items: center;
 		gap: 0.5rem;
 	}
-	.link {
-		border: none;
-		background: none;
-		color: var(--brand);
-		font-weight: 600;
-		padding: 0.25rem;
-	}
 	.customer {
 		display: flex;
 		gap: 0.5rem;
 	}
 	.input.small {
-		width: 7rem;
-		padding: 0.4rem 0.6rem;
+		width: 7.5rem;
 		text-align: right;
 	}
 	.lines {
@@ -630,23 +643,6 @@
 		font-weight: 600;
 		white-space: nowrap;
 	}
-	.stepper {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-	}
-	.stepper button {
-		width: 30px;
-		height: 30px;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		background: var(--surface);
-	}
-	.stepper span {
-		min-width: 2ch;
-		text-align: center;
-		font-weight: 600;
-	}
 	.totals {
 		display: grid;
 		grid-template-columns: 1fr auto;
@@ -678,7 +674,8 @@
 		gap: 0.5rem;
 	}
 	.actions button {
-		padding: 0.9rem;
+		min-height: 56px;
+		font-size: 1.05rem;
 	}
 	.toast {
 		position: fixed;
@@ -701,7 +698,7 @@
 		.menu {
 			overflow: visible;
 		}
-		.grid {
+		.products {
 			overflow: visible;
 		}
 		.cart {

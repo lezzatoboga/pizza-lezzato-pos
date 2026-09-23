@@ -53,7 +53,7 @@
 		display: flex;
 		flex-direction: column;
 		width: 100%;
-		max-width: 520px;
+		max-width: 600px;
 		max-height: calc(100dvh - 2rem);
 		background: var(--surface);
 		border-radius: 16px;
@@ -64,7 +64,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
-		padding: 1rem 1.25rem;
+		padding: 0.5rem 0.5rem 0.5rem 1.25rem;
 		border-bottom: 1px solid var(--border);
 	}
 	h2 {
@@ -72,11 +72,16 @@
 		font-size: 1.15rem;
 	}
 	.close {
+		width: var(--touch-lg);
+		height: var(--touch-lg);
 		border: none;
+		border-radius: 10px;
 		background: none;
-		font-size: 1.1rem;
+		font-size: 1.2rem;
 		color: var(--muted);
-		padding: 0.25rem 0.5rem;
+	}
+	.close:active {
+		background: var(--bg);
 	}
 	.body {
 		padding: 1rem 1.25rem;

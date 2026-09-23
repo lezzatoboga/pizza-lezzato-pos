@@ -1,3 +1,9 @@
+/*
+ * Target perangkat: tablet Android landscape, dioperasikan dengan sentuhan.
+ *   - Target sentuh minimal 44px (--touch), tombol utama 48px (--touch-lg).
+ *   - Tidak ada fitur/informasi yang bergantung pada hover; umpan balik
+ *     tekan memakai :active.
+ */
 :root {
 	--brand: #c0392b;
 	--brand-strong: #a93226;
@@ -9,6 +15,9 @@
 	--border: #e4ded8;
 	--danger: #b3261e;
 	--radius: 12px;
+	--touch: 44px;
+	--touch-lg: 48px;
+	--topbar-h: 64px;
 	color-scheme: light;
 }
 
@@ -26,23 +35,29 @@ body {
 		'Segoe UI',
 		Roboto,
 		sans-serif;
+	font-size: 16px;
 	-webkit-tap-highlight-color: transparent;
 }
 
 button {
 	font: inherit;
 	cursor: pointer;
+	/* Hilangkan jeda ketuk ganda & seleksi teks tak sengaja saat ditekan */
+	touch-action: manipulation;
+	user-select: none;
+	-webkit-user-select: none;
 }
 
 .btn-primary {
+	min-height: var(--touch-lg);
 	border: none;
 	border-radius: var(--radius);
 	background: var(--brand);
 	color: #fff;
-	padding: 0.85rem 1.25rem;
+	padding: 0 1.25rem;
 	font-weight: 600;
 }
-.btn-primary:hover:not(:disabled) {
+.btn-primary:active:not(:disabled) {
 	background: var(--brand-strong);
 }
 .btn-primary:disabled {
@@ -51,11 +66,15 @@ button {
 }
 
 .btn-ghost {
+	min-height: var(--touch);
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
 	background: var(--surface);
 	color: var(--text);
-	padding: 0.5rem 0.9rem;
+	padding: 0 1rem;
+}
+.btn-ghost:active:not(:disabled) {
+	background: var(--bg);
 }
 .btn-ghost:disabled {
 	opacity: 0.5;
@@ -64,11 +83,12 @@ button {
 
 .input {
 	width: 100%;
+	min-height: var(--touch);
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
 	background: var(--surface);
 	color: var(--text);
-	padding: 0.7rem 0.85rem;
+	padding: 0 0.85rem;
 	font: inherit;
 }
 .input:focus {
@@ -85,15 +105,53 @@ button {
 }
 .segmented button {
 	flex: 1;
+	min-height: var(--touch);
 	border: none;
 	border-radius: 9px;
 	background: transparent;
 	color: var(--muted);
-	padding: 0.55rem 0.5rem;
+	padding: 0 0.5rem;
 	font-weight: 600;
 }
 .segmented button.selected {
 	background: var(--surface);
 	color: var(--brand);
 	box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+
+/* Tombol +/− untuk jumlah */
+.stepper {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+}
+.stepper button {
+	width: var(--touch);
+	height: var(--touch);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--surface);
+	font-size: 1.2rem;
+	color: var(--text);
+}
+.stepper button:active:not(:disabled) {
+	background: var(--brand-soft);
+}
+.stepper button:disabled {
+	opacity: 0.35;
+}
+.stepper .count {
+	min-width: 2.5ch;
+	text-align: center;
+	font-weight: 600;
+}
+
+/* Tombol teks (mis. "Ubah", "Batal") — tetap punya area sentuh penuh */
+.link {
+	min-height: var(--touch);
+	border: none;
+	background: none;
+	color: var(--brand);
+	font-weight: 600;
+	padding: 0 0.75rem;
 }

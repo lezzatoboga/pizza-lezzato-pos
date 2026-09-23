@@ -218,6 +218,6 @@
 		color: var(--muted);
 	}
 	.pay {
-		padding: 0.5rem 1.1rem;
+		padding: 0 1.25rem;
 	}
 </style>

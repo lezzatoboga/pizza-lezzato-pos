@@ -71,7 +71,8 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
-		padding: 0.75rem 1rem;
+		height: var(--topbar-h);
+		padding: 0 1rem;
 		background: var(--surface);
 		border-bottom: 1px solid var(--border);
 	}
@@ -88,8 +89,11 @@
 		gap: 0.25rem;
 	}
 	nav a {
-		padding: 0.4rem 0.8rem;
-		border-radius: 8px;
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--touch-lg);
+		padding: 0 1.1rem;
+		border-radius: 10px;
 		color: var(--muted);
 		text-decoration: none;
 		font-weight: 600;
@@ -97,6 +101,9 @@
 	nav a.active {
 		background: var(--brand-soft);
 		color: var(--brand);
+	}
+	nav a:active {
+		background: var(--brand-soft);
 	}
 	@media (max-width: 640px) {
 		.brand {

@@ -46,17 +46,21 @@ Deno.serve(async (req) => {
 
 	try {
 		const web = websiteClient();
-		const [products, variants, toppings, toppingPrices] = await Promise.all([
+		const [products, variants, toppings, toppingPrices, categories, sections] = await Promise.all([
 			web
 				.from('menu_items')
 				.select('id, name, category_slug, section_key, kind, base_price, active, sort_order')
 				.neq('kind', 'package'),
 			web.from('menu_item_variants').select('id, menu_item_id, variant_key, label, price, sort_order'),
 			web.from('xtratopping').select('id, name, active, sort_order'),
-			web.from('xtratopping_price').select('variant_key, price')
+			web.from('xtratopping_price').select('variant_key, price'),
+			web.from('menu_categories').select('slug, label, sort_order'),
+			web.from('menu_sections').select('key, category_slug, label, sort_order')
 		]);
 
-		const failed = [products, variants, toppings, toppingPrices].find((r) => r.error);
+		const failed = [products, variants, toppings, toppingPrices, categories, sections].find(
+			(r) => r.error
+		);
 		if (failed?.error) throw new Error(`Gagal membaca database website: ${failed.error.message}`);
 
 		const { data, error } = await admin.rpc('apply_menu_sync', {
@@ -64,7 +68,9 @@ Deno.serve(async (req) => {
 				products: products.data,
 				variants: variants.data,
 				toppings: toppings.data,
-				topping_prices: toppingPrices.data
+				topping_prices: toppingPrices.data,
+				categories: categories.data,
+				sections: sections.data
 			},
 			p_trigger: auth.trigger,
 			p_triggered_by: auth.userId
