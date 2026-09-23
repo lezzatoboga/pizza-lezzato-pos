@@ -619,11 +619,11 @@
 		color: var(--muted);
 		white-space: nowrap;
 	}
+	/* Semua kategori terlihat sekaligus (terbungkus ke baris berikutnya), tanpa geser */
 	.tabs {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.5rem;
-		overflow-x: auto;
-		padding-bottom: 0.25rem;
 	}
 	.tabs button {
 		flex: none;
@@ -829,14 +829,20 @@
 		margin: 0;
 		font-size: 0.9rem;
 	}
+	/* Simpan & Bayar sama besar: delivery COD sering Simpan dulu, Bayar belakangan */
 	.actions {
 		display: grid;
-		grid-template-columns: 1fr 2fr;
+		grid-template-columns: 1fr 1fr;
 		gap: 0.5rem;
 	}
 	.actions button {
 		min-height: 56px;
 		font-size: 1.05rem;
+		font-weight: 600;
+	}
+	.actions .btn-ghost {
+		border: 2px solid var(--brand);
+		color: var(--brand);
 	}
 	.toast {
 		position: fixed;
