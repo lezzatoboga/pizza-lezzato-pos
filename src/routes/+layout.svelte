@@ -43,6 +43,9 @@
 					<a href="/" class:active={page.url.pathname === '/'}>Kasir</a>
 					<a href="/transaksi" class:active={page.url.pathname === '/transaksi'}>Transaksi</a>
 					<a href="/shift" class:active={page.url.pathname === '/shift'}>Shift</a>
+					{#if auth.can('manage_settings')}
+						<a href="/pengaturan" class:active={page.url.pathname === '/pengaturan'}>Pengaturan</a>
+					{/if}
 				</nav>
 			</div>
 			<div class="who">

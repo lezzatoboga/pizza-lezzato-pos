@@ -1,12 +1,17 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import CourierDialog from '$lib/components/CourierDialog.svelte';
 	import PaymentDialog from '$lib/components/PaymentDialog.svelte';
 	import { friendlyError, jakartaToday, rupiah, timeOf } from '$lib/format';
 	import { loadContext, loadTransactions, type TransactionRow } from '$lib/pos/data';
 	import {
 		CHANNEL_LABEL,
+		COURIER_TYPE_LABEL,
 		SALES_TYPE_LABEL,
 		type BankAccount,
+		type Courier,
+		type CourierValue,
+		type StaffMember,
 		type PaymentMethod,
 		type SavedTransaction
 	} from '$lib/pos/types';
@@ -14,6 +19,9 @@
 	let rows = $state<TransactionRow[] | null>(null);
 	let methods = $state<PaymentMethod[]>([]);
 	let bankAccounts = $state<BankAccount[]>([]);
+	let couriers = $state<Courier[]>([]);
+	let staff = $state<StaffMember[]>([]);
+	let editingCourier = $state<TransactionRow | null>(null);
 	let error = $state('');
 	let filter = $state<'all' | 'unpaid'>('all');
 	let paying = $state<SavedTransaction | null>(null);
@@ -34,6 +42,8 @@
 			const ctx = await loadContext();
 			methods = ctx.paymentMethods;
 			bankAccounts = ctx.bankAccounts;
+			couriers = ctx.couriers;
+			staff = ctx.staff;
 		} catch (e) {
 			error = friendlyError(e);
 		}
@@ -46,6 +56,26 @@
 		} catch (e) {
 			error = friendlyError(e);
 		}
+	}
+
+	const needsCourier = (r: TransactionRow) =>
+		r.sales_type === 'delivery' && (r.channel === 'admin_toko' || r.channel === 'website');
+
+	function courierText(r: TransactionRow) {
+		if (!r.courier_type) return null;
+		if (r.courier_type === 'karyawan')
+			return staff.find((s) => s.id === r.courier_user_id)?.name ?? 'Karyawan';
+		if (r.courier_type === 'freelance') return r.couriers?.name ?? 'Freelance';
+		return COURIER_TYPE_LABEL[r.courier_type];
+	}
+
+	function courierValue(r: TransactionRow): CourierValue | null {
+		if (!r.courier_type) return null;
+		return {
+			type: r.courier_type,
+			user_id: r.courier_user_id ?? undefined,
+			courier_id: r.courier_id ?? undefined
+		};
 	}
 
 	function channelText(r: TransactionRow) {
@@ -97,6 +127,16 @@
 								</span>
 							{/each}
 						</div>
+						{#if needsCourier(r)}
+							<div class="courier" class:missing={!r.courier_type}>
+								Kurir: {courierText(r) ?? 'belum diatur'}
+								{#if r.status === 'active' && r.payment_status === 'unpaid'}
+									<button class="link" onclick={() => (editingCourier = r)}>
+										{r.courier_type ? 'Ganti' : 'Atur kurir'}
+									</button>
+								{/if}
+							</div>
+						{/if}
 					</div>
 					<div class="side">
 						<strong>{rupiah(r.total)}</strong>
@@ -112,7 +152,13 @@
 							<button
 								class="btn-primary pay"
 								onclick={() =>
-									(paying = { id: r.id, transaction_number: r.transaction_number, total: r.total })}
+									needsCourier(r) && !r.courier_type
+										? (editingCourier = r)
+										: (paying = {
+												id: r.id,
+												transaction_number: r.transaction_number,
+												total: r.total
+											})}
 							>
 								Bayar
 							</button>
@@ -125,6 +171,21 @@
 		</ul>
 	{/if}
 </section>
+
+{#if editingCourier}
+	<CourierDialog
+		transactionId={editingCourier.id}
+		transactionNumber={editingCourier.transaction_number}
+		current={courierValue(editingCourier)}
+		{couriers}
+		{staff}
+		ondone={() => {
+			editingCourier = null;
+			refresh();
+		}}
+		onclose={() => (editingCourier = null)}
+	/>
+{/if}
 
 {#if paying}
 	<PaymentDialog
@@ -228,6 +289,18 @@
 	.badge.void {
 		background: var(--bg);
 		color: var(--muted);
+	}
+	.courier {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-top: 0.25rem;
+		font-size: 0.9rem;
+		color: var(--muted);
+	}
+	.courier.missing {
+		color: var(--danger);
+		font-weight: 600;
 	}
 	.pay {
 		padding: 0 1.25rem;

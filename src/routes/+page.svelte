@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/auth/auth.svelte';
+	import CourierPicker from '$lib/components/CourierPicker.svelte';
 	import CustomerDialog from '$lib/components/CustomerDialog.svelte';
 	import OpenShiftForm from '$lib/components/OpenShiftForm.svelte';
 	import PackageDialog from '$lib/components/PackageDialog.svelte';
@@ -17,9 +18,15 @@
 	} from '$lib/pos/data';
 	import { menuVersion } from '$lib/pos/menu-version.svelte';
 	import { groupMenu, type MenuSectionGroup } from '$lib/pos/menu-order';
-	import { applyMarkup, lineTotal } from '$lib/pos/pricing';
+	import {
+		applyMarkup,
+		lineTotal,
+		manualDiscountAmount,
+		shippingFromDistance
+	} from '$lib/pos/pricing';
 	import type {
 		CartLine,
+		CourierValue,
 		Customer,
 		Channel,
 		Menu,
@@ -43,7 +50,16 @@
 	let salesType = $state<SalesType>('dine_in');
 	let platformId = $state('');
 	let markupOverride = $state<string | null>(null);
+	// Delivery: ongkir manual atau dari jarak, kurir (boleh menyusul, wajib sebelum bayar)
+	let shippingMode = $state<'manual' | 'distance'>('manual');
 	let shippingInput = $state('');
+	let distanceInput = $state('');
+	let courier = $state<CourierValue | null>(null);
+	// Diskon manual (admin toko)
+	let discountOn = $state(false);
+	let discountType = $state<'percent' | 'amount'>('percent');
+	let discountInput = $state('');
+	let discountReason = $state('');
 	// Pelanggan (admin toko) — nama/alamat bisa diubah khusus pesanan ini
 	let customer = $state<Customer | null>(null);
 	let pickingCustomer = $state(false);
@@ -107,7 +123,22 @@
 	);
 
 	const shippingAllowed = $derived(channel === 'admin_toko' && salesType === 'delivery');
-	const shipping = $derived(shippingAllowed ? Number(shippingInput.replace(/\D/g, '')) || 0 : 0);
+	const ratePerKm = $derived(ctx?.outlet.delivery_rate_per_km ?? 0);
+	const distanceKm = $derived(Number(distanceInput.replace(',', '.')) || 0);
+	const distanceValid = $derived(distanceKm > 0 && distanceKm <= 999 && ratePerKm > 0);
+	const shipping = $derived(
+		!shippingAllowed
+			? 0
+			: shippingMode === 'distance'
+				? distanceValid
+					? shippingFromDistance(distanceKm, ratePerKm)
+					: 0
+				: Number(shippingInput.replace(/\D/g, '')) || 0
+	);
+	// Ongkir delivery wajib diisi eksplisit (boleh 0).
+	const shippingMissing = $derived(
+		shippingAllowed && (shippingMode === 'manual' ? shippingInput.trim() === '' : !distanceValid)
+	);
 
 	function basePrice(line: CartLine) {
 		return line.variant?.price ?? line.product.base_price ?? 0;
@@ -140,7 +171,42 @@
 	}
 
 	const subtotal = $derived(lines.reduce((sum, l) => sum + priceOf(l), 0));
-	const total = $derived(subtotal + shipping);
+	const discountValue = $derived(
+		discountType === 'amount'
+			? Number(discountInput.replace(/\D/g, '')) || 0
+			: Number(discountInput.replace(',', '.')) || 0
+	);
+	const discountActive = $derived(channel === 'admin_toko' && discountOn);
+	const discountAmount = $derived(
+		discountActive && discountValue > 0
+			? manualDiscountAmount(discountType, discountValue, subtotal)
+			: 0
+	);
+	const discountProblem = $derived(
+		!discountActive
+			? ''
+			: discountValue <= 0 || (discountType === 'percent' && discountValue > 100)
+				? 'Nilai diskon tidak valid'
+				: discountAmount > subtotal
+					? 'Diskon melebihi subtotal'
+					: !discountReason.trim()
+						? 'Isi alasan diskon'
+						: ''
+	);
+	const total = $derived(subtotal - discountAmount + shipping);
+
+	const blocker = $derived(
+		!markupValid
+			? 'Markup tidak valid'
+			: customerMissing
+				? 'Delivery: pilih pelanggan dan isi alamat'
+				: shippingMissing
+					? 'Delivery: isi ongkir (boleh 0) atau jarak'
+					: discountProblem
+	);
+	const canSave = $derived(!saving && lines.length > 0 && !blocker);
+	// Kurir boleh menyusul saat Simpan, tapi wajib sebelum bayar.
+	const canPayNow = $derived(canSave && !(isDelivery && !courier));
 
 	function productFromPrice(p: Product) {
 		const prices = p.variants.length ? p.variants.map((v) => v.price) : [p.base_price ?? 0];
@@ -189,7 +255,13 @@
 
 	function resetOrder() {
 		lines = [];
+		shippingMode = 'manual';
 		shippingInput = '';
+		distanceInput = '';
+		courier = null;
+		discountOn = false;
+		discountInput = '';
+		discountReason = '';
 		customer = null;
 		orderName = '';
 		deliveryAddress = '';
@@ -236,6 +308,15 @@
 		if (isDelivery) {
 			payload.delivery_address = deliveryAddress;
 			payload.delivery_patokan = deliveryPatokan;
+			if (shippingMode === 'distance') payload.distance_km = distanceKm;
+			if (courier) payload.courier = courier;
+		}
+		if (discountActive && discountAmount > 0) {
+			payload.manual_discount = {
+				type: discountType,
+				value: discountValue,
+				reason: discountReason.trim()
+			};
 		}
 		if (channel === 'marketplace') {
 			payload.customer_name = marketplaceRef;
@@ -449,6 +530,53 @@
 				</div>
 			{/if}
 
+			{#if isDelivery}
+				<div class="block">
+					<div class="block-head">
+						<span>Ongkir</span>
+						<div class="segmented compact">
+							<button
+								class:selected={shippingMode === 'manual'}
+								onclick={() => (shippingMode = 'manual')}>Input manual</button
+							>
+							<button
+								class:selected={shippingMode === 'distance'}
+								onclick={() => (shippingMode = 'distance')}>Hitung jarak</button
+							>
+						</div>
+					</div>
+					{#if shippingMode === 'manual'}
+						<input
+							class="input"
+							inputmode="numeric"
+							placeholder="Ongkir (wajib, boleh 0)"
+							value={shippingInput.trim() === '' ? '' : shipping.toLocaleString('id-ID')}
+							oninput={(e) => (shippingInput = e.currentTarget.value)}
+						/>
+					{:else}
+						<div class="distance">
+							<input
+								class="input km"
+								inputmode="decimal"
+								placeholder="Jarak"
+								bind:value={distanceInput}
+							/>
+							<span>km × {rupiah(ratePerKm)} = <strong>{rupiah(shipping)}</strong></span>
+						</div>
+						{#if ratePerKm <= 0}
+							<p class="hint">Tarif ongkir per km belum diatur di Pengaturan.</p>
+						{:else}
+							<p class="hint">Dibulatkan ke atas per Rp1.000.</p>
+						{/if}
+					{/if}
+
+					<div class="block-head">
+						<span>Kurir <small>(boleh nanti, wajib sebelum bayar)</small></span>
+					</div>
+					<CourierPicker bind:value={courier} couriers={ctx.couriers} staff={ctx.staff} />
+				</div>
+			{/if}
+
 			<ul class="lines">
 				{#each lines as line (line.key)}
 					<li>
@@ -487,20 +615,78 @@
 				maxlength="200"
 			/>
 
+			{#if channel === 'admin_toko'}
+				{#if !discountOn}
+					<button class="link add-discount" onclick={() => (discountOn = true)}
+						>+ Diskon manual</button
+					>
+				{:else}
+					<div class="block">
+						<div class="block-head">
+							<span>Diskon manual</span>
+							<button
+								class="link"
+								onclick={() => {
+									discountOn = false;
+									discountInput = '';
+									discountReason = '';
+								}}>Hapus</button
+							>
+						</div>
+						<div class="discount-row">
+							<div class="segmented compact">
+								<button
+									class:selected={discountType === 'percent'}
+									onclick={() => {
+										discountType = 'percent';
+										discountInput = '';
+									}}>%</button
+								>
+								<button
+									class:selected={discountType === 'amount'}
+									onclick={() => {
+										discountType = 'amount';
+										discountInput = '';
+									}}>Rp</button
+								>
+							</div>
+							{#if discountType === 'percent'}
+								<input
+									class="input"
+									inputmode="decimal"
+									placeholder="10"
+									bind:value={discountInput}
+								/>
+							{:else}
+								<input
+									class="input"
+									inputmode="numeric"
+									placeholder="5.000"
+									value={discountValue ? discountValue.toLocaleString('id-ID') : ''}
+									oninput={(e) => (discountInput = e.currentTarget.value)}
+								/>
+							{/if}
+						</div>
+						<input
+							class="input"
+							placeholder="Alasan diskon (wajib)"
+							bind:value={discountReason}
+							maxlength="150"
+						/>
+					</div>
+				{/if}
+			{/if}
+
 			<dl class="totals">
 				<dt>Subtotal</dt>
 				<dd>{rupiah(subtotal)}</dd>
+				{#if discountAmount > 0}
+					<dt>Diskon{discountType === 'percent' ? ` ${discountValue}%` : ''}</dt>
+					<dd>− {rupiah(discountAmount)}</dd>
+				{/if}
 				{#if shippingAllowed}
 					<dt>Ongkir</dt>
-					<dd>
-						<input
-							class="input small"
-							inputmode="numeric"
-							placeholder="0"
-							value={shipping ? shipping.toLocaleString('id-ID') : ''}
-							oninput={(e) => (shippingInput = e.currentTarget.value)}
-						/>
-					</dd>
+					<dd>{shippingMissing ? '—' : rupiah(shipping)}</dd>
 				{/if}
 				<dt class="grand">Total</dt>
 				<dd class="grand">{rupiah(total)}</dd>
@@ -508,26 +694,13 @@
 
 			<p class="error" role="alert">
 				{saveError ||
-					(!markupValid
-						? 'Markup tidak valid'
-						: customerMissing && lines.length > 0
-							? 'Delivery: pilih pelanggan dan isi alamat'
-							: '')}
+					(lines.length > 0 ? blocker : '') ||
+					(lines.length > 0 && canSave && !canPayNow ? 'Pilih kurir untuk bayar sekarang' : '')}
 			</p>
 
 			<div class="actions">
-				<button
-					class="btn-ghost"
-					onclick={() => save(false)}
-					disabled={saving || lines.length === 0 || !markupValid || customerMissing}
-				>
-					Simpan
-				</button>
-				<button
-					class="btn-primary"
-					onclick={() => save(true)}
-					disabled={saving || lines.length === 0 || !markupValid || customerMissing}
-				>
+				<button class="btn-ghost" onclick={() => save(false)} disabled={!canSave}> Simpan </button>
+				<button class="btn-primary" onclick={() => save(true)} disabled={!canPayNow}>
 					{saving ? 'Menyimpan…' : `Bayar ${rupiah(total)}`}
 				</button>
 			</div>
@@ -735,6 +908,52 @@
 	}
 	.pick-customer:active {
 		background: var(--brand-soft);
+	}
+	.block {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 0.6rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+	}
+	.block-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		font-weight: 600;
+	}
+	.block-head small {
+		color: var(--muted);
+		font-weight: 400;
+	}
+	.segmented.compact button {
+		font-size: 0.85rem;
+		padding: 0 0.75rem;
+	}
+	.distance {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.distance .km {
+		width: 6rem;
+		text-align: right;
+	}
+	.hint {
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.8rem;
+	}
+	.discount-row {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.5rem;
+	}
+	.add-discount {
+		align-self: flex-start;
+		padding: 0;
 	}
 	.customer-card {
 		display: flex;

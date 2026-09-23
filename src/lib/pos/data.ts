@@ -2,6 +2,9 @@ import { supabase } from '$lib/supabase/client';
 import type {
 	BankAccount,
 	ChosenOption,
+	Courier,
+	CourierValue,
+	StaffMember,
 	Customer,
 	Menu,
 	Outlet,
@@ -106,14 +109,17 @@ export type PosContext = {
 	paymentMethods: PaymentMethod[];
 	bankAccounts: BankAccount[];
 	platforms: Platform[];
+	// Pilihan kurir delivery
+	couriers: Courier[];
+	staff: StaffMember[];
 };
 
 // Fase 1: satu outlet aktif (outlet utama).
 export async function loadContext(): Promise<PosContext> {
-	const [outlets, methods, banks, platforms] = await Promise.all([
+	const [outlets, methods, banks, platforms, couriers, staff] = await Promise.all([
 		supabase
 			.from('outlets')
-			.select('id, code, name')
+			.select('id, code, name, delivery_rate_per_km')
 			.eq('active', true)
 			.order('created_at')
 			.limit(1),
@@ -127,7 +133,13 @@ export async function loadContext(): Promise<PosContext> {
 			.from('marketplace_platforms')
 			.select('id, code, name, markup_percent')
 			.eq('active', true)
-			.order('sort_order')
+			.order('sort_order'),
+		supabase
+			.from('couriers')
+			.select('id, name, active, sort_order')
+			.eq('active', true)
+			.order('sort_order'),
+		supabase.rpc('list_courier_staff')
 	]);
 
 	const outlet = (unwrap(outlets) as Outlet[])[0];
@@ -147,6 +159,8 @@ export async function loadContext(): Promise<PosContext> {
 		shift,
 		paymentMethods: unwrap(methods),
 		bankAccounts: unwrap(banks),
+		couriers: unwrap(couriers),
+		staff: unwrap(staff) as StaffMember[],
 		platforms: (unwrap(platforms) as Platform[]).map((p) => ({
 			...p,
 			markup_percent: Number(p.markup_percent)
@@ -173,6 +187,11 @@ export type TransactionPayload = {
 	customer_name?: string;
 	delivery_address?: string;
 	delivery_patokan?: string;
+	// Delivery: ongkir manual ATAU jarak (ongkir dihitung server)
+	distance_km?: number;
+	courier?: CourierValue;
+	// Admin toko: diskon manual
+	manual_discount?: { type: 'percent' | 'amount'; value: number; reason: string };
 	notes?: string;
 	items: {
 		item_type: 'product' | 'package';
@@ -221,6 +240,10 @@ export type TransactionRow = {
 	change_amount: number | null;
 	status: 'active' | 'voided';
 	customer_name: string | null;
+	courier_type: CourierValue['type'] | null;
+	courier_user_id: string | null;
+	courier_id: string | null;
+	couriers: { name: string } | null;
 	payment_methods: { name: string } | null;
 	bank_accounts: { bank_name: string } | null;
 	marketplace_platforms: { name: string } | null;
@@ -241,6 +264,7 @@ export async function loadTransactions(date: string): Promise<TransactionRow[]> 
 			.select(
 				`id, transaction_number, created_at, channel, sales_type, total, payment_status,
 				 change_amount, status, customer_name,
+				 courier_type, courier_user_id, courier_id, couriers(name),
 				 payment_methods(name), bank_accounts(bank_name), marketplace_platforms(name),
 				 transaction_items(item_type, product_name_snapshot, variant_name_snapshot, qty,
 				   package_choices_snapshot,
@@ -392,4 +416,85 @@ export async function syncCustomersNow(): Promise<{ customers: number; skipped: 
 		throw new Error(body?.error ?? 'Sinkron pelanggan gagal. Periksa koneksi internet.');
 	}
 	return data;
+}
+
+export async function setTransactionCourier(
+	transactionId: string,
+	courier: CourierValue
+): Promise<void> {
+	unwrap(
+		await supabase.rpc('set_transaction_courier', {
+			p_transaction_id: transactionId,
+			p_courier: courier
+		})
+	);
+}
+
+// ---------------------------------------------------------------------
+// Pengaturan (manage_settings; markup juga edit_markup — dicek server)
+// ---------------------------------------------------------------------
+
+export type SettingsData = {
+	outlet: { id: string; name: string; delivery_rate_per_km: number };
+	platforms: { id: string; name: string; markup_percent: number }[];
+	couriers: Courier[];
+	banks: { id: string; bank_name: string; active: boolean }[];
+	methods: { id: string; code: string; name: string; active: boolean; is_cash: boolean }[];
+};
+
+// Termasuk baris nonaktif, supaya bisa diaktifkan kembali.
+export async function loadSettings(): Promise<SettingsData> {
+	const [outlets, platforms, couriers, banks, methods] = await Promise.all([
+		supabase
+			.from('outlets')
+			.select('id, name, delivery_rate_per_km')
+			.eq('active', true)
+			.order('created_at')
+			.limit(1),
+		supabase.from('marketplace_platforms').select('id, name, markup_percent').order('sort_order'),
+		supabase.from('couriers').select('id, name, active, sort_order').order('sort_order'),
+		supabase.from('bank_accounts').select('id, bank_name, active').order('sort_order'),
+		supabase.from('payment_methods').select('id, code, name, active, is_cash').order('sort_order')
+	]);
+	return {
+		outlet: (unwrap(outlets) as SettingsData['outlet'][])[0],
+		platforms: (unwrap(platforms) as SettingsData['platforms']).map((p) => ({
+			...p,
+			markup_percent: Number(p.markup_percent)
+		})),
+		couriers: unwrap(couriers),
+		banks: unwrap(banks),
+		methods: unwrap(methods)
+	};
+}
+
+export async function updatePlatformMarkup(platformId: string, markup: number): Promise<void> {
+	unwrap(
+		await supabase.rpc('update_platform_markup', {
+			p_platform_id: platformId,
+			p_markup_percent: markup
+		})
+	);
+}
+
+export async function setDeliveryRate(outletId: string, rate: number): Promise<void> {
+	unwrap(await supabase.rpc('set_delivery_rate', { p_outlet_id: outletId, p_rate: rate }));
+}
+
+export async function saveCourier(id: string | null, name: string, active: boolean): Promise<void> {
+	unwrap(await supabase.rpc('save_courier', { p_id: id, p_name: name, p_active: active }));
+}
+
+export async function saveBankAccount(
+	id: string | null,
+	bankName: string,
+	active: boolean
+): Promise<void> {
+	unwrap(
+		await supabase.rpc('save_bank_account', { p_id: id, p_bank_name: bankName, p_active: active })
+	);
+}
+
+export async function setPaymentMethodActive(id: string, active: boolean): Promise<void> {
+	unwrap(await supabase.rpc('set_payment_method_active', { p_id: id, p_active: active }));
 }

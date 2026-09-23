@@ -48,7 +48,7 @@ export type Menu = {
 	toppingPrices: Record<string, number>;
 };
 
-export type Outlet = { id: string; code: string; name: string };
+export type Outlet = { id: string; code: string; name: string; delivery_rate_per_km: number };
 
 export type Shift = {
 	id: string;
@@ -70,6 +70,26 @@ export type PaymentMethod = {
 };
 
 export type BankAccount = { id: string; bank_name: string };
+
+export type CourierType = 'karyawan' | 'freelance' | 'shopee_express' | 'maxim';
+
+export const COURIER_TYPE_LABEL: Record<CourierType, string> = {
+	karyawan: 'Karyawan',
+	freelance: 'Freelance',
+	shopee_express: 'Shopee Express',
+	maxim: 'Maxim'
+};
+
+// Kurir terpilih untuk pesanan delivery.
+export type CourierValue = {
+	type: CourierType;
+	user_id?: string;
+	courier_id?: string;
+};
+
+// Kurir freelance (dikelola di Pengaturan) & karyawan pengantar.
+export type Courier = { id: string; name: string; active: boolean; sort_order: number };
+export type StaffMember = { id: string; name: string };
 
 export type Platform = { id: string; code: string; name: string; markup_percent: number };
 
