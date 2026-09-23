@@ -42,6 +42,7 @@
 				<nav>
 					<a href="/" class:active={page.url.pathname === '/'}>Kasir</a>
 					<a href="/transaksi" class:active={page.url.pathname === '/transaksi'}>Transaksi</a>
+					<a href="/shift" class:active={page.url.pathname === '/shift'}>Shift</a>
 				</nav>
 			</div>
 			<div class="who">

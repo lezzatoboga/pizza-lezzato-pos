@@ -56,7 +56,8 @@ export type Shift = {
 	cashier_id: string;
 	opening_balance: number;
 	opening_time: string;
-	status: 'open' | 'closed';
+	// counting = hitungan kas sudah disimpan, menunggu ditutup
+	status: 'open' | 'counting' | 'closed';
 };
 
 export type PaymentMethod = {

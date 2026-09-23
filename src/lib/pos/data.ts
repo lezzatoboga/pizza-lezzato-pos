@@ -137,7 +137,7 @@ export async function loadContext(): Promise<PosContext> {
 			.from('shifts')
 			.select('id, outlet_id, cashier_id, opening_balance, opening_time, status')
 			.eq('outlet_id', outlet.id)
-			.eq('status', 'open')
+			.in('status', ['open', 'counting'])
 			.maybeSingle()
 	) as Shift | null;
 
@@ -275,4 +275,86 @@ export async function syncMenuNow(): Promise<{
 		throw new Error(body?.error ?? 'Sinkron menu gagal. Periksa koneksi internet.');
 	}
 	return data;
+}
+
+// ---------------------------------------------------------------------
+// Shift: kas masuk/keluar & tutup shift
+// ---------------------------------------------------------------------
+
+export type CashMovement = {
+	id: string;
+	type: 'masuk' | 'keluar';
+	amount: number;
+	description: string;
+	created_at: string;
+	created_by: string | null;
+};
+
+export type ShiftSummary = {
+	shift: {
+		id: string;
+		status: 'open' | 'counting' | 'closed';
+		opening_balance: number;
+		opening_time: string;
+		closing_time: string | null;
+		opened_by: string | null;
+		counted_by: string | null;
+		closed_by: string | null;
+		notes: string | null;
+	};
+	transaction_count: number;
+	unpaid: { id: string; transaction_number: string; total: number; created_at: string }[];
+	cash_movements: CashMovement[];
+	// Hanya ada setelah hitungan kas disimpan (hitung buta).
+	cash?: {
+		opening_balance: number;
+		cash_sales: number;
+		cash_in: number;
+		cash_out: number;
+		expected: number;
+		counted: number;
+		difference: number;
+		denominations: Record<string, number>;
+	};
+	sales_total?: number;
+	by_payment?: { method: string; bank: string | null; count: number; total: number }[];
+	by_channel?: { channel: string; platform: string | null; count: number; total: number }[];
+};
+
+export async function getShiftSummary(shiftId: string): Promise<ShiftSummary> {
+	return unwrap(await supabase.rpc('get_shift_summary', { p_shift_id: shiftId })) as ShiftSummary;
+}
+
+export async function addCashMovement(
+	outletId: string,
+	type: 'masuk' | 'keluar',
+	amount: number,
+	description: string
+): Promise<void> {
+	unwrap(
+		await supabase.rpc('add_cash_movement', {
+			p_outlet_id: outletId,
+			p_type: type,
+			p_amount: amount,
+			p_description: description
+		})
+	);
+}
+
+export async function submitCashCount(
+	shiftId: string,
+	denominations: Record<string, number>
+): Promise<ShiftSummary> {
+	return unwrap(
+		await supabase.rpc('submit_cash_count', {
+			p_shift_id: shiftId,
+			p_denominations: denominations
+		})
+	) as ShiftSummary;
+}
+
+export async function closeShift(shiftId: string, notes: string): Promise<ShiftSummary> {
+	return unwrap(
+		await supabase.rpc('close_shift', { p_shift_id: shiftId, p_notes: notes })
+	) as ShiftSummary;
 }

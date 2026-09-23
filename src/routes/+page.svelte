@@ -243,6 +243,11 @@
 	<p class="page-error">{loadError}</p>
 {:else if !ctx}
 	<p class="page-status">Memuat…</p>
+{:else if ctx.shift?.status === 'counting'}
+	<div class="counting">
+		<p>Shift sedang ditutup — hitungan kas sudah disimpan.</p>
+		<a class="btn-primary as-link" href="/shift">Lanjutkan tutup shift</a>
+	</div>
 {:else if !ctx.shift}
 	<OpenShiftForm outlet={ctx.outlet} onopened={(shift) => ctx && (ctx.shift = shift)} />
 {:else}
@@ -496,6 +501,16 @@
 	}
 	.page-error {
 		color: var(--danger);
+	}
+	.counting {
+		max-width: 420px;
+		margin: 3rem auto;
+		text-align: center;
+	}
+	.as-link {
+		display: inline-flex;
+		align-items: center;
+		text-decoration: none;
 	}
 	.muted {
 		color: var(--muted);
