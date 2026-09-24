@@ -1,6 +1,6 @@
 // Dokumen contoh untuk uji printer (Pengaturan → Printer).
 // Isi mengikuti draf format tiket dapur & struk yang disepakati.
-import { EscPos, LINE_WIDTH } from './escpos';
+import { COMPACT_LINE_SPACING, EscPos, LINE_WIDTH } from './escpos';
 
 function stamp(doc: EscPos, label: string) {
 	const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
@@ -75,4 +75,35 @@ export function testWidth(): Uint8Array {
 	doc.align('center').line('Rata tengah').align('right').line('Rata kanan').align('left');
 	doc.pair('Kiri', 'Kanan');
 	return doc.cut().toBytes();
+}
+
+// Blok teks yang sama dicetak dengan beberapa jarak baris untuk dibandingkan
+// panjang kertas & keterbacaannya. Ukuran huruf tetap normal.
+export function testLineSpacing(): Uint8Array {
+	const doc = new EscPos(null);
+	stamp(doc, 'JARAK BARIS');
+	const sample = (d: EscPos) => {
+		d.line('1x Paket Andalan 2');
+		d.line('   Pilihan Pizza: Meat Lovers');
+		d.pair('Subtotal', 'Rp268.000');
+		d.bold(true).pair('TOTAL', 'Rp251.200').bold(false);
+	};
+	const variants: [string, number | null][] = [
+		['A. DEFAULT PRINTER', null],
+		['B. 28 titik', 28],
+		['C. 26 titik (usulan)', 26],
+		['D. 24 titik (paling rapat)', 24]
+	];
+	for (const [label, dots] of variants) {
+		doc.lineSpacing(null).rule('=').bold(true).line(label).bold(false);
+		doc.lineSpacing(dots);
+		sample(doc);
+	}
+	// Font kecil (font B) hanya untuk baris kurang penting: pemisah & catatan.
+	doc.lineSpacing(null).rule('=').bold(true).line('E. 26 + catatan kecil').bold(false);
+	doc.lineSpacing(COMPACT_LINE_SPACING);
+	doc.line('1x Paket Andalan 2');
+	doc.font('B').line('   Catatan: potong 8, saus dipisah').line('-'.repeat(42)).font('A');
+	doc.bold(true).pair('TOTAL', 'Rp251.200').bold(false);
+	return doc.lineSpacing(null).cut().toBytes();
 }

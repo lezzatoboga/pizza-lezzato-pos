@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Uji printer lewat RawBT sebelum alur cetak lengkap dibangun.
 	import { isAndroid, sendToRawBT } from '$lib/print/rawbt';
-	import { testKitchenTicket, testReceipt, testWidth } from '$lib/print/test-docs';
+	import { testKitchenTicket, testLineSpacing, testReceipt, testWidth } from '$lib/print/test-docs';
 
 	const android = isAndroid();
 	let pending = $state('');
@@ -37,6 +37,7 @@
 	<button class="btn-primary" onclick={() => print(testKitchenTicket())}>Tes tiket dapur</button>
 	<button class="btn-primary" onclick={() => print(testReceipt())}>Tes struk</button>
 	<button class="btn-ghost" onclick={() => print(testWidth())}>Tes lebar kertas</button>
+	<button class="btn-ghost" onclick={() => print(testLineSpacing())}>Tes jarak baris</button>
 </div>
 
 <h3>Tes cetak otomatis (tertunda)</h3>
@@ -71,6 +72,11 @@
 	<li>
 		<strong>Cetak tertunda:</strong> apakah "Tunda 2 detik" dan "Tunda 6 detik" masih tercetak, atau salah
 		satunya diblokir browser?
+	</li>
+	<li>
+		<strong>Jarak baris:</strong> di "Tes jarak baris", pilih yang paling rapat tapi masih nyaman dibaca
+		(A default printer, B 28, C 26, D 24 titik). Blok E memakai huruf kecil untuk pemisah & catatan —
+		apakah catatan kecil itu masih terbaca jelas?
 	</li>
 	<li>
 		<strong>Kecepatan:</strong> kira-kira berapa detik dari tombol diketuk sampai kertas keluar?

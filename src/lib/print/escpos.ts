@@ -3,6 +3,11 @@
 
 export const LINE_WIDTH = 32;
 
+// Jarak baris (titik, 8 titik = 1 mm). Huruf normal (font A) tingginya 24 titik;
+// default printer umumnya ±30. Nilai rapat untuk tiket & struk — final setelah uji
+// cetak di tablet (Pengaturan → Printer → Tes jarak baris).
+export const COMPACT_LINE_SPACING = 26;
+
 const ESC = 0x1b;
 const GS = 0x1d;
 
@@ -30,9 +35,13 @@ function toAscii(text: string): string {
 
 export class EscPos {
 	private bytes: number[] = [];
+	private spacing: number | null = null;
+	private tall = false;
 
-	constructor() {
+	// lineSpacing: jarak baris dalam titik; null = default printer.
+	constructor(lineSpacing: number | null = COMPACT_LINE_SPACING) {
 		this.raw(ESC, 0x40); // inisialisasi printer
+		this.lineSpacing(lineSpacing);
 	}
 
 	raw(...values: number[]) {
@@ -49,6 +58,24 @@ export class EscPos {
 		return this.text(value).raw(0x0a);
 	}
 
+	// ESC 3 n (atur) / ESC 2 (kembali ke default printer).
+	lineSpacing(dots: number | null) {
+		this.spacing = dots;
+		return this.applySpacing();
+	}
+
+	// Huruf 2x tinggi (48 titik) butuh jarak baris 2x supaya tidak bertumpuk.
+	private applySpacing() {
+		if (this.spacing == null) return this.raw(ESC, 0x32);
+		const dots = this.tall ? this.spacing * 2 : this.spacing;
+		return this.raw(ESC, 0x33, Math.max(0, Math.min(255, dots)));
+	}
+
+	// Font A 12x24 (32 karakter/baris) atau font B 9x17 (42 karakter/baris, lebih kecil).
+	font(type: 'A' | 'B') {
+		return this.raw(ESC, 0x4d, type === 'A' ? 0 : 1);
+	}
+
 	align(position: 'left' | 'center' | 'right') {
 		return this.raw(ESC, 0x61, position === 'left' ? 0 : position === 'center' ? 1 : 2);
 	}
@@ -59,7 +86,13 @@ export class EscPos {
 
 	// Ukuran huruf: 1 = normal, 2 = dua kali lebar & tinggi.
 	size(width: 1 | 2, height: 1 | 2 = width) {
-		return this.raw(GS, 0x21, ((width - 1) << 4) | (height - 1));
+		this.raw(GS, 0x21, ((width - 1) << 4) | (height - 1));
+		const tall = height === 2;
+		if (tall !== this.tall) {
+			this.tall = tall;
+			this.applySpacing();
+		}
+		return this;
 	}
 
 	// Garis pemisah selebar kertas.
