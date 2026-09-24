@@ -1,13 +1,34 @@
 <script lang="ts">
 	// Uji printer lewat RawBT sebelum alur cetak lengkap dibangun.
-	import { isAndroid, sendToRawBT } from '$lib/print/rawbt';
+	import { isAndroid, rawbtUrl, sendToRawBT, type RawBTMethod } from '$lib/print/rawbt';
 	import { testKitchenTicket, testLineSpacing, testReceipt, testWidth } from '$lib/print/test-docs';
 
 	const android = isAndroid();
+	let method = $state<RawBTMethod>('intent');
 	let pending = $state('');
+	// Diagnosis: memastikan tombol benar-benar berjalan & apakah RawBT terbuka.
+	let status = $state('');
+	let statusKind = $state<'info' | 'ok' | 'fail'>('info');
 
-	function print(bytes: Uint8Array) {
-		sendToRawBT(bytes);
+	const directLink = $derived(rawbtUrl(testReceipt(), method));
+
+	async function print(name: string, make: () => Uint8Array) {
+		statusKind = 'info';
+		status = `Mengirim "${name}" ke RawBT (metode ${method})…`;
+		try {
+			const bytes = make();
+			const opened = await sendToRawBT(bytes, method);
+			if (opened) {
+				statusKind = 'ok';
+				status = `"${name}": RawBT terbuka (${bytes.length} byte dikirim, metode ${method}).`;
+			} else {
+				statusKind = 'fail';
+				status = `"${name}": tidak ada aplikasi yang terbuka dalam 3 detik (metode ${method}). Coba metode lain atau tautan langsung di bawah.`;
+			}
+		} catch (e) {
+			statusKind = 'fail';
+			status = `"${name}": gagal sebelum memanggil RawBT — ${(e as Error).message}`;
+		}
 	}
 
 	// Meniru cetak otomatis setelah menunggu server (mis. setelah Simpan).
@@ -15,7 +36,7 @@
 		pending = `Mencetak dalam ${seconds} detik…`;
 		setTimeout(() => {
 			pending = '';
-			sendToRawBT(testKitchenTicket());
+			print(`Tiket tertunda ${seconds} detik`, testKitchenTicket);
 		}, seconds * 1000);
 	}
 </script>
@@ -33,12 +54,41 @@
 	</p>
 {/if}
 
-<div class="buttons">
-	<button class="btn-primary" onclick={() => print(testKitchenTicket())}>Tes tiket dapur</button>
-	<button class="btn-primary" onclick={() => print(testReceipt())}>Tes struk</button>
-	<button class="btn-ghost" onclick={() => print(testWidth())}>Tes lebar kertas</button>
-	<button class="btn-ghost" onclick={() => print(testLineSpacing())}>Tes jarak baris</button>
+<div class="method">
+	<span>Cara memanggil RawBT:</span>
+	<div class="segmented">
+		<button class:selected={method === 'intent'} onclick={() => (method = 'intent')}>
+			Intent (disarankan)
+		</button>
+		<button class:selected={method === 'scheme'} onclick={() => (method = 'scheme')}>
+			Skema rawbt:
+		</button>
+	</div>
 </div>
+
+{#if status}
+	<p class="status {statusKind}" role="status">{status}</p>
+{/if}
+
+<div class="buttons">
+	<button class="btn-primary" onclick={() => print('Tes tiket dapur', testKitchenTicket)}
+		>Tes tiket dapur</button
+	>
+	<button class="btn-primary" onclick={() => print('Tes struk', testReceipt)}>Tes struk</button>
+	<button class="btn-ghost" onclick={() => print('Tes lebar kertas', testWidth)}
+		>Tes lebar kertas</button
+	>
+	<button class="btn-ghost" onclick={() => print('Tes jarak baris', testLineSpacing)}
+		>Tes jarak baris</button
+	>
+</div>
+
+<h3>Tautan langsung</h3>
+<p class="muted">
+	Kalau tombol di atas tidak membuka RawBT, ketuk tautan ini (tes struk, metode yang dipilih di
+	atas).
+</p>
+<a class="btn-ghost as-link" href={directLink}>Buka RawBT lewat tautan</a>
 
 <h3>Tes cetak otomatis (tertunda)</h3>
 <p class="muted">
@@ -107,6 +157,32 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.5rem;
+	}
+	.method {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 0.75rem;
+	}
+	.status {
+		padding: 0.6rem 0.85rem;
+		border-radius: var(--radius);
+		background: var(--bg);
+		overflow-wrap: anywhere;
+	}
+	.status.ok {
+		background: #eaf6ee;
+		color: #1e6b3a;
+	}
+	.status.fail {
+		background: var(--brand-soft);
+		color: var(--danger);
+	}
+	.as-link {
+		display: inline-flex;
+		align-items: center;
+		text-decoration: none;
 	}
 	.checklist {
 		margin: 0;
