@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/auth/auth.svelte';
+	import ReceiptTemplate from '$lib/components/ReceiptTemplate.svelte';
 	import PrinterTest from '$lib/components/PrinterTest.svelte';
 	import NamedListEditor from '$lib/components/NamedListEditor.svelte';
 	import { friendlyError, rupiah } from '$lib/format';
@@ -209,8 +210,7 @@
 				{:else if activeTab === 'printer'}
 					<PrinterTest />
 				{:else if activeTab === 'struk'}
-					<h2>Template struk</h2>
-					<p class="muted">Diatur di tahap cetak (tiket dapur & struk lewat RawBT).</p>
+					<ReceiptTemplate outletId={data.outlet.id} />
 				{/if}
 
 				<p class="error" role="alert">{error}</p>

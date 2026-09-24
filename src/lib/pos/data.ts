@@ -498,3 +498,62 @@ export async function saveBankAccount(
 export async function setPaymentMethodActive(id: string, active: boolean): Promise<void> {
 	unwrap(await supabase.rpc('set_payment_method_active', { p_id: id, p_active: active }));
 }
+
+// ---------------------------------------------------------------------
+// Template struk
+// ---------------------------------------------------------------------
+
+export type ReceiptSettings = {
+	outlet_id: string;
+	store_name: string;
+	address: string;
+	whatsapp: string;
+	website: string;
+	footer: string;
+	logo_width: number | null;
+	logo_height: number | null;
+	logo_data: string | null; // base64 raster 1 bit/titik
+};
+
+export async function loadReceiptSettings(outletId: string): Promise<ReceiptSettings | null> {
+	return unwrap(
+		await supabase
+			.from('receipt_settings')
+			.select(
+				'outlet_id, store_name, address, whatsapp, website, footer, logo_width, logo_height, logo_data'
+			)
+			.eq('outlet_id', outletId)
+			.maybeSingle()
+	) as ReceiptSettings | null;
+}
+
+export async function saveReceiptText(
+	outletId: string,
+	text: Pick<ReceiptSettings, 'store_name' | 'address' | 'whatsapp' | 'website' | 'footer'>
+): Promise<void> {
+	unwrap(
+		await supabase.rpc('save_receipt_text', {
+			p_outlet_id: outletId,
+			p_store_name: text.store_name,
+			p_address: text.address,
+			p_whatsapp: text.whatsapp,
+			p_website: text.website,
+			p_footer: text.footer
+		})
+	);
+}
+
+// logo null = hapus logo
+export async function saveReceiptLogo(
+	outletId: string,
+	logo: { width: number; height: number; data: string } | null
+): Promise<void> {
+	unwrap(
+		await supabase.rpc('save_receipt_logo', {
+			p_outlet_id: outletId,
+			p_width: logo?.width ?? null,
+			p_height: logo?.height ?? null,
+			p_data: logo?.data ?? null
+		})
+	);
+}
