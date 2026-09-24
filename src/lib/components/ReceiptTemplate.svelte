@@ -160,7 +160,10 @@
 	<p class="muted">Memuat…</p>
 {:else}
 	<h2>Template struk</h2>
-	<p class="muted">Kop dan penutup yang dicetak di setiap struk.</p>
+	<p class="muted">
+		Kop dan penutup yang dicetak di setiap struk. Kalau logo sudah diupload, nama toko tidak dicetak
+		(logo sudah memuatnya).
+	</p>
 
 	<div class="form">
 		<label

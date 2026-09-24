@@ -5,10 +5,12 @@ import { EscPos, fromBase64 } from './escpos';
 
 export function writeReceiptHeader(doc: EscPos, settings: ReceiptSettings) {
 	doc.align('center');
-	if (settings.logo_data && settings.logo_width && settings.logo_height) {
-		doc.image(settings.logo_width, settings.logo_height, fromBase64(settings.logo_data));
+	const hasLogo = !!(settings.logo_data && settings.logo_width && settings.logo_height);
+	if (hasLogo) {
+		doc.image(settings.logo_width!, settings.logo_height!, fromBase64(settings.logo_data!));
 	}
-	if (settings.store_name)
+	// Logo sudah memuat nama toko: nama hanya dicetak kalau belum ada logo.
+	if (!hasLogo && settings.store_name)
 		doc.size(2, 2).bold(true).wrap(settings.store_name, 0, 16).size(1).bold(false);
 	if (settings.address) doc.wrap(settings.address);
 	if (settings.whatsapp) doc.line(`WA ${settings.whatsapp}`);
