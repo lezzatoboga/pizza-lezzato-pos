@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/auth/auth.svelte';
+	import PrinterTest from '$lib/components/PrinterTest.svelte';
 	import NamedListEditor from '$lib/components/NamedListEditor.svelte';
 	import { friendlyError, rupiah } from '$lib/format';
 	import {
@@ -14,7 +15,7 @@
 	} from '$lib/pos/data';
 	import { shippingFromDistance } from '$lib/pos/pricing';
 
-	type Tab = 'markup' | 'ongkir' | 'kurir' | 'rekening' | 'metode' | 'struk';
+	type Tab = 'markup' | 'ongkir' | 'kurir' | 'rekening' | 'metode' | 'struk' | 'printer';
 
 	const canMarkup = $derived(auth.can('edit_markup'));
 	const tabs = $derived(
@@ -25,7 +26,8 @@
 				['kurir', 'Kurir freelance'],
 				['rekening', 'Rekening bank'],
 				['metode', 'Metode bayar'],
-				['struk', 'Template struk']
+				['struk', 'Template struk'],
+				['printer', 'Printer']
 			] as [Tab, string][]
 		).filter(([t]) => t !== 'markup' || canMarkup)
 	);
@@ -204,6 +206,8 @@
 							</li>
 						{/each}
 					</ul>
+				{:else if activeTab === 'printer'}
+					<PrinterTest />
 				{:else if activeTab === 'struk'}
 					<h2>Template struk</h2>
 					<p class="muted">Diatur di tahap cetak (tiket dapur & struk lewat RawBT).</p>
