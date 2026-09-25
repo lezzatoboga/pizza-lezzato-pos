@@ -18,7 +18,7 @@
 		type Gray,
 		type LogoOptions
 	} from '$lib/print/logo';
-	import { sendToRawBT } from '$lib/print/rawbt';
+	import { printTo } from '$lib/print/printer';
 	import { writeReceiptFooter, writeReceiptHeader } from '$lib/print/receipt-template';
 
 	let { outletId }: { outletId: string } = $props();
@@ -150,7 +150,11 @@
 		writeReceiptHeader(doc, settings);
 		doc.rule('=').align('center').line('(contoh isi struk)').align('left').rule();
 		writeReceiptFooter(doc, settings);
-		sendToRawBT(doc.cut().toBytes());
+		error = '';
+		saved = '';
+		printTo('cashier', doc.cut().toBytes())
+			.then(() => (saved = 'Contoh struk terkirim ke printer kasir'))
+			.catch((e) => (error = (e as Error).message));
 	}
 </script>
 
@@ -277,7 +281,9 @@
 	/>
 
 	<h3>Contoh cetak</h3>
-	<p class="muted">Mencetak kop & penutup yang sudah tersimpan lewat RawBT (tablet Android).</p>
+	<p class="muted">
+		Mencetak kop & penutup yang sudah tersimpan ke printer kasir (aplikasi Android).
+	</p>
 	<button class="btn-ghost" onclick={printSample} disabled={busy}>Cetak contoh struk</button>
 
 	<p class="error" role="alert">{error}</p>

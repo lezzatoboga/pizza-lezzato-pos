@@ -27,3 +27,8 @@ Pass database Supabase.txt
 *.secret.txt
 supabase/.temp
 supabase/.branches
+
+# Keystore penanda tangan APK & password-nya — kredensial, jangan di-commit
+*.jks
+*.keystore
+keystore.properties

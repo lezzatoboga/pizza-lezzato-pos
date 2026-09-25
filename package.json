@@ -11,9 +11,12 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check .",
-		"format": "prettier --write ."
+		"format": "prettier --write .",
+		"android:sync": "npm run build && cap sync android",
+		"android:debug": "cd android && gradlew assembleDebug"
 	},
 	"devDependencies": {
+		"@capacitor/cli": "^8.5.2",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.63.0",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
@@ -26,6 +29,8 @@
 		"vite": "^8.0.16"
 	},
 	"dependencies": {
+		"@capacitor/android": "^8.5.2",
+		"@capacitor/core": "^8.5.2",
 		"@supabase/supabase-js": "^2.117.1"
 	}
 }
