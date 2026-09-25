@@ -13,7 +13,7 @@
 		"lint": "prettier --check .",
 		"format": "prettier --write .",
 		"android:sync": "npm run build && cap sync android",
-		"android:debug": "cd android && gradlew assembleDebug"
+		"android:debug": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-build.ps1"
 	},
 	"devDependencies": {
 		"@capacitor/cli": "^8.5.2",

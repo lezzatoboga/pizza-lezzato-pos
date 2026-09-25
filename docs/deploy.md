@@ -33,7 +33,13 @@ Kalau nama project berbeda dari `pizza-lezzato-pos`, ubah alamat default di
 
 ## APK Android
 
-Prasyarat: Android Studio (sudah termasuk Android SDK & JDK).
+Prasyarat: Android Studio (sudah termasuk Android SDK & JDK). Buat `android/local.properties`
+(tidak di-commit) berisi lokasi SDK, mis. `sdk.dir=D\:\\AndroidStudio\\SDK` (backslash wajib ganda).
+
+`npm run android:debug` menjalankan `scripts/android-build.ps1`, yang memakai JDK bawaan Android
+Studio dan mengatasi error Gradle "Unable to establish loopback connection" pada akun Windows
+yang folder TEMP-nya mengandung spasi. Gradle wrapper memakai 9.1 karena JDK bawaan Android
+Studio adalah JDK 25.
 
 ```bash
 # Salin konfigurasi & aset web ke proyek Android
