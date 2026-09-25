@@ -4,6 +4,7 @@
 	import PaymentDialog from '$lib/components/PaymentDialog.svelte';
 	import { friendlyError, jakartaToday, rupiah, timeOf } from '$lib/format';
 	import { loadContext, loadTransactions, type TransactionRow } from '$lib/pos/data';
+	import { printKitchenTicket, printReceipt } from '$lib/print/jobs';
 	import {
 		CHANNEL_LABEL,
 		COURIER_TYPE_LABEL,
@@ -25,6 +26,9 @@
 	let error = $state('');
 	let filter = $state<'all' | 'unpaid'>('all');
 	let paying = $state<SavedTransaction | null>(null);
+	// Cetak dari daftar: id transaksi yang sedang dicetak & pesan hasilnya.
+	let printingId = $state<string | null>(null);
+	let notice = $state<{ text: string; failed: boolean } | null>(null);
 
 	const visible = $derived(
 		(rows ?? []).filter(
@@ -78,6 +82,41 @@
 		};
 	}
 
+	async function runPrint(r: TransactionRow, kind: 'kitchen' | 'receipt') {
+		if (printingId) return;
+		// Struk delivery butuh kurir: atur dulu.
+		if (kind === 'receipt' && needsCourier(r) && !r.courier_type) {
+			notice = {
+				text: `${r.transaction_number}: tentukan kurir sebelum mencetak struk.`,
+				failed: true
+			};
+			editingCourier = r;
+			return;
+		}
+		printingId = r.id;
+		notice = null;
+		try {
+			if (kind === 'kitchen') {
+				const { reprint } = await printKitchenTicket(r.id);
+				notice = {
+					text: `${r.transaction_number}: tiket dapur tercetak${reprint ? ' (cetak ulang)' : ''}.`,
+					failed: false
+				};
+			} else {
+				const { reprint, paid } = await printReceipt(r.id);
+				notice = {
+					text: `${r.transaction_number}: struk ${paid ? 'Lunas' : 'Belum Lunas'} tercetak${reprint ? ' (cetak ulang)' : ''}.`,
+					failed: false
+				};
+			}
+			await refresh();
+		} catch (e) {
+			notice = { text: `${r.transaction_number}: ${friendlyError(e)}`, failed: true };
+		} finally {
+			printingId = null;
+		}
+	}
+
 	function channelText(r: TransactionRow) {
 		return r.marketplace_platforms?.name ?? CHANNEL_LABEL[r.channel] ?? r.channel;
 	}
@@ -98,6 +137,10 @@
 		{activeRows.length} transaksi · lunas {rupiah(paidTotal)}
 	</p>
 
+	{#if notice}
+		<p class="notice" class:failed={notice.failed} role="status">{notice.text}</p>
+	{/if}
+
 	{#if error}
 		<p class="error">{error}</p>
 	{:else if !rows}
@@ -113,6 +156,8 @@
 							<span class="chip">{channelText(r)}</span>
 							<span class="chip">{SALES_TYPE_LABEL[r.sales_type]}</span>
 							{#if r.customer_name}<span class="muted">· {r.customer_name}</span>{/if}
+							{#if r.is_locked && r.status === 'active'}<span class="chip locked">Terkunci</span
+								>{/if}
 						</div>
 						<div class="items">
 							{#each r.transaction_items as item, i (i)}
@@ -162,6 +207,26 @@
 							>
 								Bayar
 							</button>
+						{/if}
+						{#if r.status === 'active'}
+							<div class="print-actions">
+								<button
+									class="btn-ghost"
+									onclick={() => runPrint(r, 'kitchen')}
+									disabled={!!printingId}
+								>
+									{r.kitchen_ticket_print_count > 0 ? 'Tiket ulang' : 'Tiket dapur'}
+								</button>
+								<button
+									class="btn-ghost"
+									onclick={() => runPrint(r, 'receipt')}
+									disabled={!!printingId}
+								>
+									{printingId === r.id
+										? 'Mencetak…'
+										: `Struk ${r.payment_status === 'paid' ? 'Lunas' : 'Belum Lunas'}${r.receipt_print_count > 0 ? ' (ulang)' : ''}`}
+								</button>
+							</div>
 						{/if}
 					</div>
 				</li>
@@ -301,6 +366,29 @@
 	.courier.missing {
 		color: var(--danger);
 		font-weight: 600;
+	}
+	.notice {
+		padding: 0.6rem 0.85rem;
+		border-radius: var(--radius);
+		background: #eaf6ee;
+		color: #1e6b3a;
+	}
+	.notice.failed {
+		background: var(--brand-soft);
+		color: var(--danger);
+	}
+	.chip.locked {
+		background: #fff4e0;
+		color: #8a5300;
+	}
+	.print-actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 0.4rem;
+	}
+	.print-actions button {
+		font-size: 0.9rem;
 	}
 	.pay {
 		padding: 0 1.25rem;

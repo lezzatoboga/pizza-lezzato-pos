@@ -17,6 +17,7 @@
 		type TransactionPayload
 	} from '$lib/pos/data';
 	import { menuVersion } from '$lib/pos/menu-version.svelte';
+	import { printKitchenTicket } from '$lib/print/jobs';
 	import { groupMenu, type MenuSectionGroup } from '$lib/pos/menu-order';
 	import {
 		applyMarkup,
@@ -327,9 +328,21 @@
 		try {
 			const saved = await createTransaction(payload);
 			resetOrder();
-			if (payNow) paying = saved;
-			else
-				showToast(`${saved.transaction_number} tersimpan · belum dibayar · ${rupiah(saved.total)}`);
+			// Tiket dapur otomatis setelah transaksi tersimpan. Gagal cetak tidak
+			// membatalkan transaksi — tiket bisa dicetak ulang dari halaman Transaksi.
+			const kitchen = printKitchenTicket(saved.id).then(
+				() => 'tiket dapur tercetak',
+				(e) => `tiket dapur belum tercetak: ${friendlyError(e)}`
+			);
+			if (payNow) {
+				paying = saved;
+				kitchen.then((note) => {
+					if (note !== 'tiket dapur tercetak') showToast(`${saved.transaction_number} · ${note}`);
+				});
+			} else {
+				const note = await kitchen;
+				showToast(`${saved.transaction_number} tersimpan · belum dibayar · ${note}`);
+			}
 		} catch (e) {
 			saveError = friendlyError(e);
 		} finally {
