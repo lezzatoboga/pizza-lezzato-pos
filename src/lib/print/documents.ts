@@ -219,3 +219,38 @@ export function receipt(data: PrintData, settings: ReceiptSettings | null): Uint
 	if (settings) writeReceiptFooter(doc, settings);
 	return doc.cut().toBytes();
 }
+
+// ------------------------------------------------------------------ slip BATAL (dapur)
+
+// Dicetak ke printer dapur kalau tiket dapur transaksi ini sudah pernah dicetak.
+export function kitchenVoidSlip(data: PrintData, reason: string | null): Uint8Array {
+	const doc = new EscPos();
+	const now = new Date().toLocaleTimeString('id-ID', {
+		hour: '2-digit',
+		minute: '2-digit',
+		timeZone: 'Asia/Jakarta'
+	});
+	doc.align('center').size(2).bold(true).line('*** BATAL ***').size(1).bold(false);
+	doc.line('Jangan dibuat / hentikan pesanan');
+	doc.align('left').rule('=');
+	doc.pair(data.transaction_number, now.replace('.', ':'));
+	doc.line(SALES_TYPE_TEXT[data.sales_type]);
+	if (data.channel === 'marketplace') {
+		doc.line(
+			`${(data.platform_name ?? 'Marketplace').toUpperCase()} ${data.customer_name ?? ''}`.trim()
+		);
+	} else if (data.customer_name) {
+		doc.wrap(data.customer_name);
+	}
+	doc.rule();
+	for (const item of data.items) {
+		doc.bold(true).wrap(`${item.qty}x ${item.product_name}`).bold(false);
+		if (item.variant_name) doc.line(`   ${item.variant_name.toUpperCase()}`);
+	}
+	if (reason) {
+		doc.rule();
+		doc.wrap(`Alasan: ${reason}`);
+	}
+	doc.rule('=');
+	return doc.cut().toBytes();
+}

@@ -4,7 +4,7 @@
 // cetakan sebelumnya benar-benar sampai ke printer.
 import { supabase } from '$lib/supabase/client';
 import { loadReceiptSettings } from '$lib/pos/data';
-import { kitchenTicket, receipt, type PrintData } from './documents';
+import { kitchenTicket, kitchenVoidSlip, receipt, type PrintData } from './documents';
 import { PrintError, printTo } from './printer';
 
 async function loadPrintData(transactionId: string): Promise<PrintData> {
@@ -51,4 +51,10 @@ export async function printReceipt(
 	await printTo('cashier', receipt(data, settings));
 	await mark('mark_receipt_printed', transactionId);
 	return { reprint: data.receipt_print_count > 0, paid: data.payment_status === 'paid' };
+}
+
+// Slip BATAL ke dapur untuk transaksi yang sudah dibatalkan.
+export async function printVoidSlip(transactionId: string, reason: string | null): Promise<void> {
+	const data = await loadPrintData(transactionId);
+	await printTo('kitchen', kitchenVoidSlip(data, reason));
 }

@@ -240,6 +240,9 @@ export type TransactionRow = {
 	change_amount: number | null;
 	status: 'active' | 'voided';
 	is_locked: boolean;
+	voided_by: string | null;
+	voided_at: string | null;
+	void_reason: string | null;
 	kitchen_ticket_print_count: number;
 	receipt_print_count: number;
 	customer_name: string | null;
@@ -266,7 +269,7 @@ export async function loadTransactions(date: string): Promise<TransactionRow[]> 
 			.from('transactions')
 			.select(
 				`id, transaction_number, created_at, channel, sales_type, total, payment_status,
-				 change_amount, status, is_locked, kitchen_ticket_print_count, receipt_print_count,
+				 change_amount, status, is_locked, voided_by, voided_at, void_reason, kitchen_ticket_print_count, receipt_print_count,
 				 customer_name,
 				 courier_type, courier_user_id, courier_id, couriers(name),
 				 payment_methods(name), bank_accounts(bank_name), marketplace_platforms(name),
@@ -560,4 +563,56 @@ export async function saveReceiptLogo(
 			p_data: logo?.data ?? null
 		})
 	);
+}
+
+// ---------------------------------------------------------------------
+// Void (pembatalan)
+// ---------------------------------------------------------------------
+
+export type VoidReasonCode = 'salah_input' | 'pelanggan_batal' | 'pesanan_dobel' | 'lainnya';
+
+export const VOID_REASONS: { code: VoidReasonCode; label: string }[] = [
+	{ code: 'salah_input', label: 'Salah input' },
+	{ code: 'pelanggan_batal', label: 'Pelanggan batal' },
+	{ code: 'pesanan_dobel', label: 'Pesanan dobel' },
+	{ code: 'lainnya', label: 'Lainnya' }
+];
+
+export type VoidResult =
+	| {
+			status: 'voided';
+			transaction_number: string;
+			paid: boolean;
+			payment_method_name: string | null;
+			refund_cash: number;
+			refund_recorded_as_cash_out: boolean;
+			kitchen_ticket_printed: boolean;
+	  }
+	| { status: 'approval_required'; reason: string }
+	| { status: 'pin_invalid'; attempts_left: number | null }
+	| { status: 'pin_locked'; locked_until: string };
+
+export async function voidTransaction(
+	transactionId: string,
+	reasonCode: VoidReasonCode,
+	reasonDetail: string,
+	approval?: { approverId: string; pin: string }
+): Promise<VoidResult> {
+	return unwrap(
+		await supabase.rpc('void_transaction', {
+			p_transaction_id: transactionId,
+			p_reason_code: reasonCode,
+			p_reason_detail: reasonDetail || null,
+			p_approver_id: approval?.approverId ?? null,
+			p_approver_pin: approval?.pin ?? null
+		})
+	) as VoidResult;
+}
+
+export async function listVoidApprovers(): Promise<StaffMember[]> {
+	return unwrap(await supabase.rpc('list_void_approvers')) as StaffMember[];
+}
+
+export async function listUserNames(): Promise<StaffMember[]> {
+	return unwrap(await supabase.rpc('list_pos_user_names')) as StaffMember[];
 }

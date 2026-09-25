@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import CourierDialog from '$lib/components/CourierDialog.svelte';
+	import VoidDialog from '$lib/components/VoidDialog.svelte';
 	import PaymentDialog from '$lib/components/PaymentDialog.svelte';
 	import { friendlyError, jakartaToday, rupiah, timeOf } from '$lib/format';
-	import { loadContext, loadTransactions, type TransactionRow } from '$lib/pos/data';
+	import { listUserNames, loadContext, loadTransactions, type TransactionRow } from '$lib/pos/data';
 	import { printKitchenTicket, printReceipt } from '$lib/print/jobs';
 	import {
 		CHANNEL_LABEL,
@@ -22,6 +23,10 @@
 	let bankAccounts = $state<BankAccount[]>([]);
 	let couriers = $state<Courier[]>([]);
 	let staff = $state<StaffMember[]>([]);
+	// Semua nama pengguna (termasuk Owner) untuk menampilkan siapa yang membatalkan.
+	let userNames = $state<StaffMember[]>([]);
+	let voiding = $state<TransactionRow | null>(null);
+	const userName = (id: string) => userNames.find((u) => u.id === id)?.name ?? '';
 	let editingCourier = $state<TransactionRow | null>(null);
 	let error = $state('');
 	let filter = $state<'all' | 'unpaid'>('all');
@@ -48,6 +53,7 @@
 			bankAccounts = ctx.bankAccounts;
 			couriers = ctx.couriers;
 			staff = ctx.staff;
+			userNames = await listUserNames();
 		} catch (e) {
 			error = friendlyError(e);
 		}
@@ -187,6 +193,11 @@
 						<strong>{rupiah(r.total)}</strong>
 						{#if r.status === 'voided'}
 							<span class="badge void">Dibatalkan</span>
+							<span class="void-info">
+								{r.void_reason}{r.voided_at ? ` · ${timeOf(r.voided_at)}` : ''}{r.voided_by
+									? ` · ${userName(r.voided_by)}`
+									: ''}
+							</span>
 						{:else if r.payment_status === 'paid'}
 							<span class="badge paid"
 								>Lunas · {r.payment_methods?.name}{r.bank_accounts
@@ -226,6 +237,13 @@
 										? 'Mencetak…'
 										: `Struk ${r.payment_status === 'paid' ? 'Lunas' : 'Belum Lunas'}${r.receipt_print_count > 0 ? ' (ulang)' : ''}`}
 								</button>
+								<button
+									class="link void-link"
+									onclick={() => (voiding = r)}
+									disabled={!!printingId}
+								>
+									Batalkan
+								</button>
 							</div>
 						{/if}
 					</div>
@@ -236,6 +254,17 @@
 		</ul>
 	{/if}
 </section>
+
+{#if voiding}
+	<VoidDialog
+		transaction={voiding}
+		ondone={() => {
+			voiding = null;
+			refresh();
+		}}
+		onclose={() => (voiding = null)}
+	/>
+{/if}
 
 {#if editingCourier}
 	<CourierDialog
@@ -386,6 +415,16 @@
 		flex-wrap: wrap;
 		justify-content: flex-end;
 		gap: 0.4rem;
+	}
+	.void-link {
+		color: var(--danger);
+	}
+	.void-info {
+		max-width: 16rem;
+		font-size: 0.8rem;
+		color: var(--muted);
+		white-space: normal;
+		text-align: right;
 	}
 	.print-actions button {
 		font-size: 0.9rem;
