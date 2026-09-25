@@ -43,6 +43,9 @@
 					<a href="/" class:active={page.url.pathname === '/'}>Kasir</a>
 					<a href="/transaksi" class:active={page.url.pathname === '/transaksi'}>Transaksi</a>
 					<a href="/shift" class:active={page.url.pathname === '/shift'}>Shift</a>
+					{#if auth.can('view_sales_report') || auth.can('view_transaction_detail') || auth.can('view_finance_report')}
+						<a href="/laporan" class:active={page.url.pathname === '/laporan'}>Laporan</a>
+					{/if}
 					{#if auth.can('manage_settings')}
 						<a href="/pengaturan" class:active={page.url.pathname === '/pengaturan'}>Pengaturan</a>
 					{/if}
@@ -110,8 +113,22 @@
 		background: var(--brand-soft);
 	}
 	@media (max-width: 640px) {
-		.brand {
+		/* Layar HP (mis. ekspor laporan dari browser): menu bisa digeser */
+		.brand,
+		.role,
+		.who > span:not(.role) {
 			display: none;
+		}
+		.left {
+			min-width: 0;
+		}
+		nav {
+			overflow-x: auto;
+			scrollbar-width: none;
+		}
+		nav a {
+			flex: none;
+			padding: 0 0.8rem;
 		}
 	}
 	.who {

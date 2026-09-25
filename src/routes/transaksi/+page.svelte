@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { auth } from '$lib/auth/auth.svelte';
 	import CourierDialog from '$lib/components/CourierDialog.svelte';
 	import VoidDialog from '$lib/components/VoidDialog.svelte';
 	import PaymentDialog from '$lib/components/PaymentDialog.svelte';
@@ -140,7 +141,9 @@
 	</header>
 
 	<p class="summary">
-		{activeRows.length} transaksi · lunas {rupiah(paidTotal)}
+		{activeRows.length} transaksi
+		<!-- Total penjualan hanya untuk yang berizin laporan: kasir menghitung kas secara buta. -->
+		{#if auth.can('view_sales_report')}· lunas {rupiah(paidTotal)}{/if}
 	</p>
 
 	{#if notice}
