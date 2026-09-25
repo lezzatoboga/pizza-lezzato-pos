@@ -1,0 +1,2 @@
+# Skrip Gradle Unix harus tetap LF supaya bisa dijalankan di Linux/macOS
+android/gradlew text eol=lf
