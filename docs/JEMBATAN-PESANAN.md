@@ -31,3 +31,18 @@ karena status bayar di POS tidak bisa kembali dari Lunas ke Belum Lunas.
 pembayaran atau refund** (Lunas → Belum Lunas), aturan ini harus ditinjau ulang dan kemungkinan
 beralih ke penghitung cetak per status (`receipt_unpaid_print_count` / `receipt_paid_print_count`
 di `transactions`, diisi oleh `mark_receipt_printed`).
+
+## Backlog (dibahas bersama kontrak data)
+
+### Ongkir: satu sumber aturan
+
+Kalkulator ongkir POS saat ini sederhana: **jarak × satu tarif per km** (Pengaturan → Tarif
+ongkir), dibulatkan ke atas per Rp1.000. Website sedang membuat ongkir otomatis dengan **tarif
+bertingkat** dan **faktor rute**. Keduanya perlu diselaraskan:
+
+- **Satu sumber aturan ongkir:** website menyimpan aturan (tarif bertingkat, faktor rute), POS
+  membaca — tidak ada dua pengaturan tarif yang bisa berbeda.
+- Pesanan website membawa ongkir yang sudah dihitung; kasir hanya meninjau/mengoreksi.
+- Untuk pesanan kasir (admin toko), POS menghitung dengan aturan yang sama (dibaca dari website
+  atau disinkronkan ke POS), lalu kalkulator jarak × tarif tunggal di POS dipensiunkan.
+- Sampai saat itu, Pengaturan → Tarif ongkir di POS tetap dipakai apa adanya.

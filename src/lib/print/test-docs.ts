@@ -90,8 +90,8 @@ export function testLineSpacing(): Uint8Array {
 	};
 	const variants: [string, number | null][] = [
 		['A. DEFAULT PRINTER', null],
-		['B. 28 titik', 28],
-		['C. 26 titik (usulan)', 26],
+		['B. 28 titik (dipakai)', 28],
+		['C. 26 titik', 26],
 		['D. 24 titik (paling rapat)', 24]
 	];
 	for (const [label, dots] of variants) {
@@ -100,7 +100,7 @@ export function testLineSpacing(): Uint8Array {
 		sample(doc);
 	}
 	// Font kecil (font B) hanya untuk baris kurang penting: pemisah & catatan.
-	doc.lineSpacing(null).rule('=').bold(true).line('E. 26 + catatan kecil').bold(false);
+	doc.lineSpacing(null).rule('=').bold(true).line('E. 28 + catatan kecil').bold(false);
 	doc.lineSpacing(COMPACT_LINE_SPACING);
 	doc.line('1x Paket Andalan 2');
 	doc.font('B').line('   Catatan: potong 8, saus dipisah').line('-'.repeat(42)).font('A');

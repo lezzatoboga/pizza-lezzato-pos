@@ -194,6 +194,9 @@ export type TransactionPayload = {
 	// Admin toko: diskon manual
 	manual_discount?: { type: 'percent' | 'amount'; value: number; reason: string };
 	notes?: string;
+	// Kunci idempoten per keranjang: kiriman ulang dengan kunci sama tidak
+	// membuat transaksi baru (lihat migrasi 20261013000001).
+	client_request_id?: string;
 	items: {
 		item_type: 'product' | 'package';
 		product_id: string;
@@ -206,10 +209,16 @@ export type TransactionPayload = {
 	}[];
 };
 
-export async function createTransaction(payload: TransactionPayload): Promise<SavedTransaction> {
+export type CreatedTransaction = SavedTransaction & {
+	// true = transaksi dengan kunci ini sudah tersimpan sebelumnya
+	duplicate: boolean;
+	kitchen_ticket_print_count: number;
+};
+
+export async function createTransaction(payload: TransactionPayload): Promise<CreatedTransaction> {
 	return unwrap(
 		await supabase.rpc('create_transaction', { p_payload: payload })
-	) as SavedTransaction;
+	) as CreatedTransaction;
 }
 
 export type PaymentResult = SavedTransaction & { amount_paid: number; change_amount: number };

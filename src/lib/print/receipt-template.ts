@@ -8,6 +8,8 @@ export function writeReceiptHeader(doc: EscPos, settings: ReceiptSettings) {
 	const hasLogo = !!(settings.logo_data && settings.logo_width && settings.logo_height);
 	if (hasLogo) {
 		doc.image(settings.logo_width!, settings.logo_height!, fromBase64(settings.logo_data!));
+		// Satu baris kosong di bawah logo supaya tidak menempel ke alamat.
+		doc.feed(1);
 	}
 	// Logo sudah memuat nama toko: nama hanya dicetak kalau belum ada logo.
 	if (!hasLogo && settings.store_name)

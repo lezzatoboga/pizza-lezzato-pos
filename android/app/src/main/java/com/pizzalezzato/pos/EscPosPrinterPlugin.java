@@ -25,8 +25,13 @@ import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Cetak ESC/POS mentah ke printer thermal Bluetooth klasik (SPP), mis. Iware MP58SB.
@@ -52,7 +57,15 @@ public class EscPosPrinterPlugin extends Plugin {
     // Beri waktu printer menerima sisa data sebelum sambungan ditutup.
     private static final long CLOSE_DELAY_MS = 600;
 
+    // BluetoothSocket.connect() tidak punya batas waktu sendiri; printer mati bisa
+    // membuat kasir menunggu belasan detik. Lewat batas ini socket ditutup paksa.
+    private static final long CONNECT_TIMEOUT_MS = 6000;
+
     private final Map<String, ExecutorService> queues = new HashMap<>();
+    // Mode sambungan yang terakhir berhasil per printer (true = insecure), supaya
+    // percobaan kedua yang lambat tidak diulang setiap cetak.
+    private final Map<String, Boolean> insecureMode = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor();
 
     // BLUETOOTH_CONNECT hanya ada (dan wajib diminta) di Android 12 ke atas.
     private boolean needsPermission() {
@@ -200,23 +213,58 @@ public class EscPosPrinterPlugin extends Plugin {
         }
     }
 
-    // Sambungan aman lebih dulu; sebagian printer murah hanya menerima sambungan "insecure".
+    // Mode yang sudah diketahui berhasil: satu percobaan saja (gagal = printer mati /
+    // di luar jangkauan, pesan cepat). Belum diketahui: aman lebih dulu, lalu
+    // "insecure" (sebagian printer murah hanya menerima itu); yang berhasil diingat.
     @SuppressLint("MissingPermission")
     private BluetoothSocket connect(BluetoothDevice device) throws IOException {
-        BluetoothSocket socket = device.createRfcommSocketToServiceRecord(SPP_UUID);
+        String address = device.getAddress();
+        Boolean known = insecureMode.get(address);
+        if (known != null) return open(device, known);
         try {
-            socket.connect();
+            BluetoothSocket socket = open(device, false);
+            insecureMode.put(address, false);
             return socket;
         } catch (IOException secureFailed) {
+            BluetoothSocket socket = open(device, true);
+            insecureMode.put(address, true);
+            return socket;
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private BluetoothSocket open(BluetoothDevice device, boolean insecure) throws IOException {
+        final BluetoothSocket socket = insecure
+            ? device.createInsecureRfcommSocketToServiceRecord(SPP_UUID)
+            : device.createRfcommSocketToServiceRecord(SPP_UUID);
+        final AtomicBoolean timedOut = new AtomicBoolean(false);
+        ScheduledFuture<?> timer = watchdog.schedule(() -> {
+            timedOut.set(true);
+            try {
+                socket.close();
+            } catch (IOException ignored) {
+                // menutup socket membuat connect() langsung gagal
+            }
+        }, CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        try {
+            socket.connect();
+        } catch (IOException e) {
+            timer.cancel(false);
             try {
                 socket.close();
             } catch (IOException ignored) {
                 // abaikan
             }
-            BluetoothSocket fallback = device.createInsecureRfcommSocketToServiceRecord(SPP_UUID);
-            fallback.connect();
-            return fallback;
+            if (timedOut.get()) throw timeoutError();
+            throw e;
         }
+        // Batas waktu habis tepat saat tersambung: socket sudah ditutup pengawas.
+        if (!timer.cancel(false) && timedOut.get()) throw timeoutError();
+        return socket;
+    }
+
+    private static IOException timeoutError() {
+        return new IOException("tidak ada jawaban dalam " + (CONNECT_TIMEOUT_MS / 1000) + " detik");
     }
 
     private static void sleep(long ms) {

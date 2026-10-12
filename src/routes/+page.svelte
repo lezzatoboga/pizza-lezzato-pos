@@ -76,6 +76,11 @@
 	let paying = $state<SavedTransaction | null>(null);
 	let toast = $state('');
 	let toastTimer: ReturnType<typeof setTimeout> | undefined;
+	// Kunci idempoten keranjang: dipakai ulang selama kasir mencoba lagi
+	// dengan isi yang sama; dibuat baru kalau isi berubah atau keranjang
+	// dikosongkan. Server mengembalikan transaksi lama untuk kunci yang sama.
+	let requestId: string | null = null;
+	let requestPayloadKey = '';
 
 	onMount(async () => {
 		try {
@@ -271,12 +276,24 @@
 		orderNotes = '';
 		markupOverride = null;
 		saveError = '';
+		requestId = null;
+		requestPayloadKey = '';
 	}
 
-	function showToast(message: string) {
+	// crypto.randomUUID hanya ada di konteks aman (https); getRandomValues ada di semua.
+	function newRequestId(): string {
+		if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+		const b = crypto.getRandomValues(new Uint8Array(16));
+		b[6] = (b[6] & 0x0f) | 0x40;
+		b[8] = (b[8] & 0x3f) | 0x80;
+		const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+		return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+	}
+
+	function showToast(message: string, ms = 5000) {
 		toast = message;
 		clearTimeout(toastTimer);
-		toastTimer = setTimeout(() => (toast = ''), 5000);
+		toastTimer = setTimeout(() => (toast = ''), ms);
 	}
 
 	async function save(payNow: boolean) {
@@ -325,24 +342,40 @@
 			payload.markup_percent = markupPercent;
 		}
 
+		const payloadKey = JSON.stringify(payload);
+		if (!requestId || payloadKey !== requestPayloadKey) {
+			requestId = newRequestId();
+			requestPayloadKey = payloadKey;
+		}
+
 		try {
-			const saved = await createTransaction(payload);
+			const saved = await createTransaction({ ...payload, client_request_id: requestId });
 			resetOrder();
-			// Tiket dapur otomatis setelah transaksi tersimpan. Gagal cetak tidak
-			// membatalkan transaksi — tiket bisa dicetak ulang dari halaman Transaksi.
-			const kitchen = printKitchenTicket(saved.id).then(
-				() => 'tiket dapur tercetak',
-				(e) => `tiket dapur belum tercetak: ${friendlyError(e)}`
-			);
-			if (payNow) {
-				paying = saved;
-				kitchen.then((note) => {
-					if (note !== 'tiket dapur tercetak') showToast(`${saved.transaction_number} · ${note}`);
-				});
-			} else {
-				const note = await kitchen;
-				showToast(`${saved.transaction_number} tersimpan · belum dibayar · ${note}`);
+			const head = saved.duplicate
+				? `${saved.transaction_number} sudah tersimpan sebelumnya`
+				: `${saved.transaction_number} tersimpan`;
+			if (payNow) paying = saved;
+
+			// Kiriman ulang yang tiketnya sudah tercetak: jangan cetak dua kali.
+			if (saved.kitchen_ticket_print_count > 0) {
+				if (!payNow) showToast(`${head} · belum dibayar · tiket dapur sudah tercetak`);
+				return;
 			}
+
+			// Tiket dapur dicetak di latar belakang: kasir bisa langsung lanjut.
+			// Gagal cetak tidak membatalkan transaksi — tiket bisa dicetak dari
+			// halaman Transaksi (chip "Tiket belum tercetak").
+			if (!payNow) showToast(`${head} · belum dibayar · mencetak tiket dapur…`, 30_000);
+			printKitchenTicket(saved.id).then(
+				() => {
+					if (!payNow) showToast(`${head} · belum dibayar · tiket dapur tercetak`);
+				},
+				(e) =>
+					showToast(
+						`${saved.transaction_number} · tiket dapur belum tercetak: ${friendlyError(e)}`,
+						10_000
+					)
+			);
 		} catch (e) {
 			saveError = friendlyError(e);
 		} finally {

@@ -4,9 +4,9 @@
 export const LINE_WIDTH = 32;
 
 // Jarak baris (titik, 8 titik = 1 mm). Huruf normal (font A) tingginya 24 titik;
-// default printer umumnya ±30. Nilai rapat untuk tiket & struk — final setelah uji
-// cetak di tablet (Pengaturan → Printer → Tes jarak baris).
-export const COMPACT_LINE_SPACING = 26;
+// default printer umumnya ±30. Dipakai semua tiket & struk: 28 titik (pilihan B
+// pada uji perangkat 12 Okt 2026 di MP58SB — paling pas).
+export const COMPACT_LINE_SPACING = 28;
 
 const ESC = 0x1b;
 const GS = 0x1d;

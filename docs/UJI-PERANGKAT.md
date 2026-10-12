@@ -9,6 +9,46 @@ Tanggal uji: ____________ Penguji: ____________ Tablet (merek/tipe, versi Androi
 > Data yang dibuat selama uji ikut masuk laporan penjualan. Setelah selesai, batalkan (void)
 > transaksi uji dari akun Owner — transaksi batal tidak dihitung di laporan.
 
+## Hasil uji
+
+### 12 Oktober 2026 (malam) — APK debug pertama
+
+Tablet kasir + dua printer MP58SB. **Semua langkah lolos.**
+
+| Bagian         | Hasil                                                                                                                                                                                                                               |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Persiapan   | ✅ APK terpasang, kedua printer terpilih                                                                                                                                                                                            |
+| 2. Tes printer | ✅ Tes dapur & kasir berhasil. Jarak baris terpilih: **B (28 titik)**                                                                                                                                                               |
+| 3. Alur        | ✅ Tiket dapur tanpa harga + topping, struk Lunas dengan logo, Terkunci, CETAK ULANG, COD (Belum Lunas → bayar → Lunas tanpa tanda → cetak lagi bertanda), marketplace, printer dapur mati (pesan jelas, transaksi tetap tersimpan) |
+| 4. Void        | ✅ Belum terkunci + slip BATAL; terkunci dengan PIN Owner (salah ditolak, benar berhasil); instruksi kembalikan tunai; "Lainnya" wajib keterangan; tanpa slip kalau tiket belum tercetak                                            |
+| 5. Delivery    | ✅ Pelanggan/alamat wajib, ongkir jarak dibulatkan ke atas Rp1.000, kurir wajib sebelum struk/bayar, kurir terkunci setelah lunas                                                                                                   |
+| 6. Penutup     | ✅ Transaksi uji dibatalkan, laporan memisahkan transaksi batal, tutup shift selisih Rp0, Uji Kasir dinonaktifkan                                                                                                                   |
+
+Temuan yang diperbaiki sesudahnya (commit setelah `f9de015`):
+
+1. Jarak baris dijadikan **28 titik** untuk semua cetakan.
+2. Logo di struk terlalu rapat dengan alamat → **satu baris kosong** di bawah logo (struk & "Cetak
+   contoh struk").
+3. Simpan saat printer dapur mati terasa lama → tiket dapur dicetak **di latar belakang**
+   (kasir langsung lanjut), chip **"Tiket belum tercetak"** di Transaksi, **batas sambungan
+   Bluetooth 6 detik** di plugin Android (perlu APK debug baru), dan **kunci idempoten** di
+   Simpan supaya kiriman ulang tidak membuat transaksi ganda.
+
+### Uji ulang singkat — APK debug baru (setelah perbaikan di atas)
+
+| No  | Langkah                                                                                                                      | Yang diharapkan                                                                                                                                                                            | Hasil | Catatan |
+| --- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- | ------- |
+| U1  | Pasang APK debug baru (langsung timpa, tidak perlu uninstal), buka Pengaturan → Printer                                      | Pilihan printer dapur & kasir masih tersimpan                                                                                                                                              |       |         |
+| U2  | **Tes tiket → dapur** dan **Tes struk → kasir**                                                                              | Keduanya tercetak; jarak baris terlihat sama dengan blok B                                                                                                                                 |       |         |
+| U3  | Template struk → **Cetak contoh struk**                                                                                      | Ada jarak satu baris antara logo dan alamat                                                                                                                                                |       |         |
+| U4  | Simpan transaksi (printer dapur menyala)                                                                                     | Tombol Simpan langsung siap lagi; pesan "tersimpan · mencetak tiket dapur…" lalu "tiket dapur tercetak"                                                                                    |       |         |
+| U5  | **Matikan printer dapur**, Simpan transaksi baru, **ukur waktu** dari ketuk Simpan sampai pesan "tiket dapur belum tercetak" | Tombol langsung siap (keranjang kosong, nomor transaksi tampil); pesan gagal muncul dalam **±6 detik** (paling lama ±12 detik pada cetak pertama setelah aplikasi dibuka). Waktu: ____ dtk |       |         |
+| U6  | Selama printer dapur masih mati, langsung buat & Simpan transaksi kedua                                                      | Bisa langsung; transaksi kedua tersimpan; pesan gagal menyusul                                                                                                                             |       |         |
+| U7  | Buka **Transaksi**                                                                                                           | Transaksi U5 & U6 bertanda chip **"Tiket belum tercetak"**                                                                                                                                 |       |         |
+| U8  | Nyalakan printer dapur → **Tiket dapur** pada transaksi U5                                                                   | Tiket tercetak; chip hilang setelah daftar dimuat ulang                                                                                                                                    |       |         |
+| U9  | Struk sungguhan: bayar salah satu transaksi → **Cetak struk (Lunas)**                                                        | Jarak baris 28 titik; satu baris kosong di bawah logo                                                                                                                                      |       |         |
+| U10 | Owner: batalkan transaksi uji                                                                                                | Transaksi uji berstatus batal                                                                                                                                                              |       |         |
+
 ## Kalau ada yang gagal, laporkan
 
 1. **Nomor langkah** (mis. 3.4) dan **akun/role** yang dipakai.
@@ -102,12 +142,12 @@ sekitar** → Izinkan.
 
 **2.5 — Pilihan jarak baris** (lingkari yang paling rapat tapi masih nyaman dibaca):
 
-| Blok | Jarak                       | Pilihan |
-| ---- | --------------------------- | ------- |
-| A    | Default printer             |         |
-| B    | 28 titik                    |         |
-| C    | 26 titik (dipakai sekarang) |         |
-| D    | 24 titik (paling rapat)     |         |
+| Blok | Jarak                           | Pilihan |
+| ---- | ------------------------------- | ------- |
+| A    | Default printer                 |         |
+| B    | 28 titik (dipakai sejak 12 Okt) |         |
+| C    | 26 titik                        |         |
+| D    | 24 titik (paling rapat)         |         |
 
 Blok **E** (26 titik + catatan huruf kecil): apakah catatan huruf kecilnya masih terbaca?
 Ya / Tidak
@@ -224,6 +264,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-build.ps1 -R
 Hasil: `android/app/build/outputs/apk/release/app-release-unsigned.apk`.
 
 ### 7.3 Rapikan & tanda tangani (Owner — memakai keystore)
+
+`apksigner` butuh Java. Jalankan dari Git Bash setelah mengarahkan `JAVA_HOME` ke JDK bawaan
+Android Studio (berlaku untuk jendela terminal itu saja):
+
+```bash
+export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"
+```
 
 ```bash
 D:/AndroidStudio/SDK/build-tools/36.0.0/zipalign.exe -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk apk/pizza-lezzato-pos-aligned.apk

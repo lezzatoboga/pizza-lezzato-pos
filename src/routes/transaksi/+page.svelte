@@ -176,6 +176,9 @@
 							{#if r.customer_name}<span class="muted">· {r.customer_name}</span>{/if}
 							{#if r.is_locked && r.status === 'active'}<span class="chip locked">Terkunci</span
 								>{/if}
+							{#if r.status === 'active' && r.kitchen_ticket_print_count === 0}<span
+									class="chip warn">Tiket belum tercetak</span
+								>{/if}
 						</div>
 						<div class="items">
 							{#each r.transaction_items as item, i (i)}
@@ -417,6 +420,11 @@
 	.notice.failed {
 		background: var(--brand-soft);
 		color: var(--danger);
+	}
+	.chip.warn {
+		background: var(--brand-soft);
+		color: var(--danger);
+		font-weight: 600;
 	}
 	.chip.locked {
 		background: #fff4e0;
