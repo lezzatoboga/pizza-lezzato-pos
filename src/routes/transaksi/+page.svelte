@@ -16,7 +16,8 @@
 		type CourierValue,
 		type StaffMember,
 		type PaymentMethod,
-		type SavedTransaction
+		type SavedTransaction,
+		type Shift
 	} from '$lib/pos/types';
 
 	let rows = $state<TransactionRow[] | null>(null);
@@ -31,6 +32,8 @@
 	let editingCourier = $state<TransactionRow | null>(null);
 	let error = $state('');
 	let filter = $state<'all' | 'unpaid'>('all');
+	// Shift aktif (open/counting) — cakupan daftar transaksi.
+	let shift = $state<Shift | null>(null);
 	let paying = $state<SavedTransaction | null>(null);
 	// Cetak dari daftar: id transaksi yang sedang dicetak & pesan hasilnya.
 	let printingId = $state<string | null>(null);
@@ -54,6 +57,7 @@
 			bankAccounts = ctx.bankAccounts;
 			couriers = ctx.couriers;
 			staff = ctx.staff;
+			shift = ctx.shift;
 			userNames = await listUserNames();
 		} catch (e) {
 			error = friendlyError(e);
@@ -63,7 +67,7 @@
 
 	async function refresh() {
 		try {
-			rows = await loadTransactions(jakartaToday());
+			rows = await loadTransactions(jakartaToday(), shift);
 		} catch (e) {
 			error = friendlyError(e);
 		}
@@ -131,7 +135,11 @@
 
 <section class="page">
 	<header>
-		<h1>Transaksi hari ini</h1>
+		<h1>
+			{auth.can('view_transaction_detail')
+				? 'Transaksi hari ini & belum lunas'
+				: 'Transaksi shift ini & belum lunas'}
+		</h1>
 		<div class="segmented filter">
 			<button class:selected={filter === 'all'} onclick={() => (filter = 'all')}>Semua</button>
 			<button class:selected={filter === 'unpaid'} onclick={() => (filter = 'unpaid')}>

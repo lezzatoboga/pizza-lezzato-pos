@@ -263,7 +263,19 @@ export type TransactionRow = {
 	}[];
 };
 
-export async function loadTransactions(date: string): Promise<TransactionRow[]> {
+// Daftar halaman Transaksi: hari ini, semua yang belum lunas (COD), transaksi
+// di shift aktif (termasuk yang melewati tengah malam), dan yang dibatalkan
+// selama shift aktif. RLS menyaring lagi per izin: kasir tanpa
+// view_transaction_detail hanya melihat shift aktif + belum lunas.
+export async function loadTransactions(
+	date: string,
+	shift: Pick<Shift, 'id' | 'opening_time'> | null
+): Promise<TransactionRow[]> {
+	const scope = [
+		`transaction_date.eq.${date}`,
+		'and(status.eq.active,payment_status.eq.unpaid)',
+		...(shift ? [`shift_id.eq.${shift.id}`, `voided_at.gte."${shift.opening_time}"`] : [])
+	].join(',');
 	return unwrap(
 		await supabase
 			.from('transactions')
@@ -277,7 +289,7 @@ export async function loadTransactions(date: string): Promise<TransactionRow[]> 
 				   package_choices_snapshot,
 				   transaction_item_addons(addon_name_snapshot, qty))`
 			)
-			.eq('transaction_date', date)
+			.or(scope)
 			.order('created_at', { ascending: false })
 	) as unknown as TransactionRow[];
 }
