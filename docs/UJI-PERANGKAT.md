@@ -228,75 +228,166 @@ dan semua langkah ❌.
 
 ---
 
-## 7. Setelah semua lolos: APK rilis bertanda tangan
+## 7. APK rilis bertanda tangan
 
-APK rilis memakai **keystore** milik Pizza Lezzato. Keystore & password-nya **tidak boleh** masuk
-repo atau dikirim ke chat, dan **wajib dicadangkan** (mis. flashdisk + penyimpanan cloud pribadi).
-Kalau keystore hilang, aplikasi yang terpasang tidak bisa di-update — harus dihapus & dipasang
-ulang.
+### Status rilis
 
-Saat ini `android/app/build.gradle` belum punya konfigurasi tanda tangan, jadi APK rilis
-ditandatangani manual dengan `apksigner` (langkah 7.3). Bila nanti ingin otomatis lewat
-`keystore.properties`, itu perubahan kode kecil yang bisa dikerjakan terpisah.
+| Versi | versionCode | Tanggal         | Keystore                                    | Alias          |
+| ----- | ----------- | --------------- | ------------------------------------------- | -------------- |
+| 1.0.0 | 1           | 13 Oktober 2026 | `D:\Lezzato\keystore\pizza-lezzato-pos.jks` | `pizzalezzato` |
 
-### 7.1 Buat keystore (sekali saja — Owner)
+Rilis 1.0.0: APK ditandatangani dan diverifikasi (`apksigner verify` lolos), APK debug
+diuninstal, APK rilis terpasang di tablet kasir, printer dapur & kasir dipilih ulang, tes
+2.1–2.2 lolos.
 
-Simpan di luar folder repo, mis. `D:\Lezzato\keystore\`:
+Password keystore dan sidik jari sertifikat **tidak** dicatat di repo — tersimpan di Bitwarden
+dan salinan offline milik Owner.
 
-```bash
-"C:/Program Files/Android/Android Studio/jbr/bin/keytool.exe" -genkeypair -v -keystore D:/Lezzato/keystore/pizza-lezzato-pos.jks -alias pizzalezzato -keyalg RSA -keysize 2048 -validity 10000
+### Aturan keystore
+
+- Keystore (`*.jks`) & password-nya **tidak boleh** masuk repo atau dikirim ke chat. Keystore
+  disimpan di luar folder repo (`D:\Lezzato\keystore\`); `.gitignore` juga mengecualikan
+  `*.jks`, `*.keystore`, `keystore.properties`, `apk/`, dan `*.apk`.
+- **Wajib dicadangkan:** file keystore + password + alias di Bitwarden, ditambah satu salinan
+  offline (flashdisk/hard disk terpisah).
+- **Kalau keystore atau password hilang:** update tidak bisa dipasang di atas aplikasi yang ada
+  (Android menolak tanda tangan berbeda) — aplikasi harus diuninstal lalu dipasang dengan
+  keystore baru, dan pilihan printer serta login di tablet harus diatur ulang. Data transaksi
+  tidak hilang (tersimpan di Supabase).
+- `android/app/build.gradle` sengaja tidak memuat konfigurasi tanda tangan; APK rilis
+  ditandatangani manual dengan `apksigner`.
+
+Semua perintah di bawah memakai **PowerShell**. Password **tidak pernah** ditulis di perintah —
+keytool dan apksigner memintanya; ketik sendiri saat diminta.
+
+### 7.0 Siapkan sesi PowerShell
+
+```powershell
+Set-Location "D:\Lezzato\Claude_Code\pizza-lezzato-pos"
 ```
 
-Isi password (minimal 6 karakter, catat di tempat aman) dan data pemilik saat diminta.
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+```
+
+`$env:JAVA_HOME` hanya berlaku di jendela itu; ulangi kalau PowerShell ditutup.
+
+### 7.1 Buat keystore (sekali saja — Owner; sudah dilakukan 13 Okt 2026)
+
+```powershell
+New-Item -ItemType Directory -Force "D:\Lezzato\keystore"
+```
+
+```powershell
+& "C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe" -genkeypair -v -keystore "D:\Lezzato\keystore\pizza-lezzato-pos.jks" -alias pizzalezzato -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Pizza Lezzato, O=Pizza Lezzato, L=Pekanbaru, C=ID"
+```
+
+keytool meminta password keystore dua kali (minimal 6 karakter; tidak tampil saat diketik).
 
 ### 7.2 Build APK rilis (belum bertanda tangan)
 
 Pastikan APK memuat hosting (bukan server dev):
 
-```bash
+```powershell
 npm run android:sync
 ```
 
-```bash
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-build.ps1 -Release
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\android-build.ps1 -Release
 ```
 
-Hasil: `android/app/build/outputs/apk/release/app-release-unsigned.apk`.
+Hasil: `android\app\build\outputs\apk\release\app-release-unsigned.apk`. `apksigner verify` pada
+file ini menjawab "DOES NOT VERIFY" — wajar, belum ditandatangani.
 
 ### 7.3 Rapikan & tanda tangani (Owner — memakai keystore)
 
-`apksigner` butuh Java. Jalankan dari Git Bash setelah mengarahkan `JAVA_HOME` ke JDK bawaan
-Android Studio (berlaku untuk jendela terminal itu saja):
-
-```bash
-export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"
+```powershell
+& "D:\AndroidStudio\SDK\build-tools\36.0.0\zipalign.exe" -p -f 4 "android\app\build\outputs\apk\release\app-release-unsigned.apk" "apk\pizza-lezzato-pos-1.0.0-aligned.apk"
 ```
 
-```bash
-D:/AndroidStudio/SDK/build-tools/36.0.0/zipalign.exe -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk apk/pizza-lezzato-pos-aligned.apk
+```powershell
+& "D:\AndroidStudio\SDK\build-tools\36.0.0\apksigner.bat" sign --ks "D:\Lezzato\keystore\pizza-lezzato-pos.jks" --ks-key-alias pizzalezzato --out "apk\pizza-lezzato-pos-1.0.0.apk" "apk\pizza-lezzato-pos-1.0.0-aligned.apk"
 ```
 
-```bash
-D:/AndroidStudio/SDK/build-tools/36.0.0/apksigner.bat sign --ks D:/Lezzato/keystore/pizza-lezzato-pos.jks --ks-key-alias pizzalezzato --out apk/pizza-lezzato-pos-1.0.apk apk/pizza-lezzato-pos-aligned.apk
+apksigner meminta `Keystore password for signer #1:` — ketik password keystore.
+
+### 7.4 Verifikasi
+
+```powershell
+& "D:\AndroidStudio\SDK\build-tools\36.0.0\apksigner.bat" verify --verbose --print-certs "apk\pizza-lezzato-pos-1.0.0.apk"
 ```
 
-```bash
-D:/AndroidStudio/SDK/build-tools/36.0.0/apksigner.bat verify --print-certs apk/pizza-lezzato-pos-1.0.apk
-```
+Yang diharapkan: `Verifies`, `Verified using v2 scheme (APK Signature Scheme v2): true`, dan
+sertifikat `CN=Pizza Lezzato, O=Pizza Lezzato, L=Pekanbaru, C=ID`. Peringatan Java
+"restricted method … loadLibrary" boleh diabaikan.
 
-Folder `apk/` dan file `*.apk` tidak ikut ke git.
+APK rilis akhir: `D:\Lezzato\Claude_Code\pizza-lezzato-pos\apk\pizza-lezzato-pos-1.0.0.apk`
+(file `…-aligned.apk` hanya perantara, boleh dihapus).
 
-### 7.4 Pasang di tablet
+### 7.5 Pasang di tablet (rilis pertama)
 
-APK debug dan rilis ditandatangani berbeda, jadi **hapus dulu** aplikasi debug:
+APK debug dan rilis ditandatangani berbeda, jadi APK debug **wajib diuninstal dulu**.
 
-1. Tablet: tahan ikon Pizza Lezzato POS → **Uninstal** (atau
-   `adb uninstall com.pizzalezzato.pos`).
-2. Pasang `apk/pizza-lezzato-pos-1.0.apk` (cara 1.1).
-3. Setelah dipasang ulang: login lagi, beri izin Bluetooth, dan **pilih ulang printer dapur &
-   kasir** (pilihan printer tersimpan di aplikasi, ikut terhapus saat uninstal). Ulangi cepat
-   langkah 2.1–2.2.
+1. Uninstal APK debug — di tablet tahan ikon Pizza Lezzato POS → **Uninstal**, atau lewat USB:
 
-Untuk update berikutnya, naikkan `versionCode` (dan `versionName`) di
-`android/app/build.gradle`, build & tanda tangani dengan **keystore yang sama**; tablet cukup
-memasang APK baru tanpa uninstal.
+   ```powershell
+   & "D:\AndroidStudio\SDK\platform-tools\adb.exe" uninstall com.pizzalezzato.pos
+   ```
+
+2. Pasang APK rilis lewat USB (atau salin ke tablet dan buka dari aplikasi File; kalau Play
+   Protect memperingatkan, pilih **Tetap instal**):
+
+   ```powershell
+   & "D:\AndroidStudio\SDK\platform-tools\adb.exe" install "apk\pizza-lezzato-pos-1.0.0.apk"
+   ```
+
+3. Login, buka **Pengaturan → Printer**, izinkan **Perangkat di sekitar / Bluetooth**.
+4. **Muat ulang daftar printer**, pilih ulang **Printer dapur** dan **Printer kasir** (pilihan
+   printer ikut terhapus saat uninstal).
+5. Tes cepat 2.1 (**Tes tiket → dapur**) dan 2.2 (**Tes struk → kasir**).
+6. Opsional: Setelan Android → Aplikasi → Pizza Lezzato POS menampilkan versi yang benar.
+
+---
+
+## 8. Cara rilis update berikutnya
+
+APK baru hanya perlu dirilis kalau kode **native** (`android/`, mis. plugin printer) atau izin
+Android berubah. Perubahan tampilan & logika cukup lewat hosting (`git push` → Cloudflare Pages),
+tanpa APK baru.
+
+1. **Naikkan versi** di `android/app/build.gradle`: `versionCode` **wajib** naik (2, 3, …;
+   Android menolak versionCode yang sama atau lebih kecil), `versionName` mengikuti (mis.
+   `1.0.1` untuk perbaikan, `1.1.0` untuk fitur). Commit perubahan ini.
+2. **Siapkan sesi** — langkah 7.0.
+3. **Build** — langkah 7.2.
+4. **Rapikan & tanda tangani** dengan keystore yang **SAMA**
+   (`D:\Lezzato\keystore\pizza-lezzato-pos.jks`, alias `pizzalezzato`), nama file mengikuti
+   versi baru — contoh untuk 1.0.1:
+
+   ```powershell
+   & "D:\AndroidStudio\SDK\build-tools\36.0.0\zipalign.exe" -p -f 4 "android\app\build\outputs\apk\release\app-release-unsigned.apk" "apk\pizza-lezzato-pos-1.0.1-aligned.apk"
+   ```
+
+   ```powershell
+   & "D:\AndroidStudio\SDK\build-tools\36.0.0\apksigner.bat" sign --ks "D:\Lezzato\keystore\pizza-lezzato-pos.jks" --ks-key-alias pizzalezzato --out "apk\pizza-lezzato-pos-1.0.1.apk" "apk\pizza-lezzato-pos-1.0.1-aligned.apk"
+   ```
+
+5. **Verifikasi** — langkah 7.4 dengan nama file baru. Sertifikat harus **sama** dengan rilis
+   sebelumnya (`CN=Pizza Lezzato, …`; bandingkan sidik jari SHA-256 dengan yang tersimpan di
+   Bitwarden).
+
+   ```powershell
+   & "D:\AndroidStudio\SDK\build-tools\36.0.0\apksigner.bat" verify --verbose --print-certs "apk\pizza-lezzato-pos-1.0.1.apk"
+   ```
+
+6. **Pasang langsung tanpa uninstal** — pilihan printer & login tetap tersimpan:
+
+   ```powershell
+   & "D:\AndroidStudio\SDK\platform-tools\adb.exe" install -r "apk\pizza-lezzato-pos-1.0.1.apk"
+   ```
+
+   Atau salin ke tablet dan buka dari aplikasi File → **Perbarui**. Kalau Android menolak karena
+   tanda tangan tidak cocok, berarti keystore yang dipakai **berbeda** — jangan uninstal; cek
+   ulang file keystore.
+
+7. Tes cepat 2.1–2.2, lalu tambahkan baris versi baru di tabel **Status rilis** (bagian 7).
