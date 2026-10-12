@@ -1,4 +1,5 @@
 import { supabase } from '$lib/supabase/client';
+import type { ReceiptPrintedStatus } from '$lib/print/reprint';
 import type {
 	BankAccount,
 	ChosenOption,
@@ -245,6 +246,7 @@ export type TransactionRow = {
 	void_reason: string | null;
 	kitchen_ticket_print_count: number;
 	receipt_print_count: number;
+	receipt_printed_status: ReceiptPrintedStatus;
 	customer_name: string | null;
 	courier_type: CourierValue['type'] | null;
 	courier_user_id: string | null;
@@ -281,7 +283,7 @@ export async function loadTransactions(
 			.from('transactions')
 			.select(
 				`id, transaction_number, created_at, channel, sales_type, total, payment_status,
-				 change_amount, status, is_locked, voided_by, voided_at, void_reason, kitchen_ticket_print_count, receipt_print_count,
+				 change_amount, status, is_locked, voided_by, voided_at, void_reason, kitchen_ticket_print_count, receipt_print_count, receipt_printed_status,
 				 customer_name,
 				 courier_type, courier_user_id, courier_id, couriers(name),
 				 payment_methods(name), bank_accounts(bank_name), marketplace_platforms(name),

@@ -7,6 +7,7 @@
 	import { friendlyError, jakartaToday, rupiah, timeOf } from '$lib/format';
 	import { listUserNames, loadContext, loadTransactions, type TransactionRow } from '$lib/pos/data';
 	import { printKitchenTicket, printReceipt } from '$lib/print/jobs';
+	import { isReceiptReprint } from '$lib/print/reprint';
 	import {
 		CHANNEL_LABEL,
 		COURIER_TYPE_LABEL,
@@ -246,7 +247,7 @@
 								>
 									{printingId === r.id
 										? 'Mencetak…'
-										: `Struk ${r.payment_status === 'paid' ? 'Lunas' : 'Belum Lunas'}${r.receipt_print_count > 0 ? ' (ulang)' : ''}`}
+										: `Struk ${r.payment_status === 'paid' ? 'Lunas' : 'Belum Lunas'}${isReceiptReprint(r) ? ' (ulang)' : ''}`}
 								</button>
 								<button
 									class="link void-link"

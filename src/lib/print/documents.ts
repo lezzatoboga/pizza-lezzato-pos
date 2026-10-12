@@ -3,6 +3,7 @@
 // (COMPACT_LINE_SPACING di escpos.ts).
 import type { ReceiptSettings } from '$lib/pos/data';
 import { EscPos } from './escpos';
+import { isReceiptReprint, type ReceiptPrintedStatus } from './reprint';
 import { writeReceiptFooter, writeReceiptHeader } from './receipt-template';
 
 export type PrintItem = {
@@ -51,6 +52,7 @@ export type PrintData = {
 	change_amount: number | null;
 	kitchen_ticket_print_count: number;
 	receipt_print_count: number;
+	receipt_printed_status: ReceiptPrintedStatus;
 	items: PrintItem[];
 };
 
@@ -139,7 +141,7 @@ export function kitchenTicket(data: PrintData): Uint8Array {
 export function receipt(data: PrintData, settings: ReceiptSettings | null): Uint8Array {
 	const doc = new EscPos();
 	if (settings) writeReceiptHeader(doc, settings);
-	if (data.receipt_print_count > 0) reprintBanner(doc);
+	if (isReceiptReprint(data)) reprintBanner(doc);
 
 	const { date, time } = dateTime(data.created_at);
 	doc.rule('=');

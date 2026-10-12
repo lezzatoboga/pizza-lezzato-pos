@@ -138,7 +138,8 @@ kecuali disebut lain.
 | 3.6  | **Tiket ulang** (tiket dapur)                                                  | Tiket keluar di DAPUR dengan tanda **\*\*\* CETAK ULANG \*\*\***                                                                   |       |         |
 | 3.7  | COD: take away, 2 item → **Simpan** (tidak dibayar)                            | Tiket dapur keluar; transaksi tampil "Belum bayar"                                                                                 |       |         |
 | 3.8  | Transaksi 3.7 → **Struk Belum Lunas**                                          | Struk keluar dengan tulisan besar **BELUM LUNAS**; transaksi jadi **Terkunci**                                                     |       |         |
-| 3.9  | Transaksi 3.7 → **Bayar** (mis. QRIS), lalu cetak struk lunas                  | Pembayaran tersimpan; struk keluar dengan **LUNAS**. Catat apakah tanda **CETAK ULANG** ikut tercetak: Ya / Tidak                  |       |         |
+| 3.9  | Transaksi 3.7 → **Bayar** (mis. QRIS), lalu cetak struk lunas                  | Pembayaran tersimpan; struk keluar dengan **LUNAS** dan **tanpa** tanda CETAK ULANG (struk berstatus beda, bukan salinan)          |       |         |
+| 3.9a | Transaksi 3.7 → **Struk Lunas (ulang)** sekali lagi                            | Struk LUNAS keluar **dengan** tanda **\*\*\* CETAK ULANG \*\*\***                                                                  |       |         |
 | 3.10 | Marketplace (mis. GoFood): isi kode pesanan → **Simpan**                       | Tiket dapur menampilkan nama platform dan kode pesanan besar; harga di layar sudah termasuk markup                                 |       |         |
 | 3.11 | Simpan transaksi saat printer DAPUR mati                                       | Transaksi tetap tersimpan, muncul pesan "tiket dapur belum tercetak …"; nyalakan printer → **Tiket dapur** dari Transaksi berhasil |       |         |
 
@@ -182,7 +183,7 @@ kecuali disebut lain.
 | 6.3 | Shift → hitung uang → tutup shift (bila perlu)   | Kas seharusnya sesuai (refund tunai sudah tercatat sebagai kas keluar) |       |         |
 
 Ringkasan untuk dilaporkan: jarak baris terpilih (2.5) ______, pengaturan logo (2.8.4) ______,
-waktu cetak (2.7) ______, jawaban 3.9 (CETAK ULANG pada struk lunas setelah Belum Lunas) ______,
+waktu cetak (2.7) ______, hasil 3.9/3.9a (tanda CETAK ULANG hanya pada struk berstatus sama) ______,
 dan semua langkah ❌.
 
 ---
