@@ -1,0 +1,25 @@
+-- =====================================================================
+-- Perbaikan: login pertama pengguna baru gagal ("Gagal menyiapkan sesi")
+--
+-- Penyebab: indeks unik pos_users_active_name_uq (20261012000004) memakai
+-- fungsi public.normalize_user_name. PostgreSQL memeriksa hak EXECUTE
+-- fungsi di ekspresi indeks setiap kali baris ditulis, dengan role yang
+-- sedang menulis. Edge Function pos-pin-login menautkan auth_user_id lewat
+-- UPDATE pos_users sebagai service_role, sedangkan hak EXECUTE fungsi itu
+-- sudah dicabut dari PUBLIC → "permission denied for function
+-- normalize_user_name" (42501). Pengguna lama tidak terkena karena
+-- auth_user_id-nya sudah tertaut sebelum indeks dibuat.
+--
+-- Penulis pos_users dan role yang menjalankannya:
+--   - pos-pin-login (UPDATE auth_user_id)          : service_role  ← gagal
+--   - verify_pos_user_pin, void_transaction (PIN),
+--     admin_*, create_pos_user, set_pos_user_pin    : pemilik fungsi
+--                                                    (SECURITY DEFINER) — aman
+--   - hapus auth user (ON DELETE SET NULL)          : pemilik tabel — aman
+--   - authenticated / anon                          : tidak punya hak tulis
+--
+-- Perbaikan seminimal mungkin: EXECUTE hanya untuk service_role. Fungsinya
+-- murni (immutable, tanpa akses data). anon/authenticated tetap tanpa hak.
+-- =====================================================================
+
+grant execute on function public.normalize_user_name(text) to service_role;
