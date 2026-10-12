@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
 	import { auth } from '$lib/auth/auth.svelte';
@@ -13,6 +13,12 @@
 
 	onMount(() => {
 		auth.init();
+	});
+
+	// Izin/role bisa diubah Owner kapan saja: segarkan profil tiap pindah
+	// halaman (akun nonaktif otomatis keluar ke layar login).
+	afterNavigate(() => {
+		if (auth.ready) auth.refresh();
 	});
 
 	$effect(() => {
@@ -48,6 +54,9 @@
 					{/if}
 					{#if auth.can('manage_settings')}
 						<a href="/pengaturan" class:active={page.url.pathname === '/pengaturan'}>Pengaturan</a>
+					{/if}
+					{#if auth.can('manage_users')}
+						<a href="/pengguna" class:active={page.url.pathname === '/pengguna'}>Pengguna</a>
 					{/if}
 				</nav>
 			</div>

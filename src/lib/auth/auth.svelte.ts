@@ -48,6 +48,21 @@ class AuthState {
 		this.profile = data as PosProfile;
 	}
 
+	// Muat ulang izin/role terbaru (dipanggil tiap pindah halaman). Gangguan
+	// jaringan: profil lama dipertahankan. Akun dinonaktifkan atau sesi habis:
+	// keluar ke layar login.
+	async refresh() {
+		if (!this.profile) return;
+		const { data, error } = await supabase.rpc('get_my_profile');
+		if (error) return;
+		if (!data) {
+			await supabase.auth.signOut();
+			this.profile = null;
+			return;
+		}
+		this.profile = data as PosProfile;
+	}
+
 	can(permission: string) {
 		return this.profile?.permissions.includes(permission) ?? false;
 	}

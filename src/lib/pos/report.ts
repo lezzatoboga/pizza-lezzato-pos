@@ -161,8 +161,8 @@ export type FilterOptions = {
 	platforms: { id: string; name: string }[];
 	payment_methods: { id: string; name: string }[];
 	bank_accounts: { id: string; name: string }[];
-	users: { id: string; name: string }[];
-	couriers: { id: string; name: string }[];
+	users: { id: string; name: string; active: boolean }[];
+	couriers: { id: string; name: string; active: boolean }[];
 	categories: { slug: string; name: string }[];
 	products: { id: string; name: string }[];
 };
@@ -335,6 +335,10 @@ const exportFormat = new Intl.DateTimeFormat('sv-SE', {
 });
 export const exportDateTime = (value: string | null) =>
 	value ? exportFormat.format(new Date(value)) : '';
+
+// Nama di pilihan filter; pengguna/kurir nonaktif tetap bisa dipilih (riwayat).
+export const optionName = (o: { name: string; active?: boolean }) =>
+	o.active === false ? `${o.name} (nonaktif)` : o.name;
 
 // Label kunci pengelompokan untuk tampilan (tanggal diformat).
 export const groupLabel = (dim: GroupBy, key: GroupKey) =>

@@ -20,6 +20,7 @@
 		loadReportTransactions,
 		loadShiftHistory,
 		loadSummary,
+		optionName,
 		presetRange,
 		type DatePreset,
 		type FilterOptions,
@@ -649,7 +650,7 @@
 							<select class="input" bind:value={filters.cashier_id}>
 								<option value="">Semua</option>
 								{#each options?.users ?? [] as u (u.id)}
-									<option value={u.id}>{u.name}</option>
+									<option value={u.id}>{optionName(u)}</option>
 								{/each}
 							</select>
 						</label>
@@ -662,14 +663,14 @@
 								{#if options?.users.length}
 									<optgroup label="Karyawan">
 										{#each options.users as u (u.id)}
-											<option value="karyawan:{u.id}">{u.name}</option>
+											<option value="karyawan:{u.id}">{optionName(u)}</option>
 										{/each}
 									</optgroup>
 								{/if}
 								{#if options?.couriers.length}
 									<optgroup label="Freelance">
 										{#each options.couriers as c (c.id)}
-											<option value="freelance:{c.id}">{c.name}</option>
+											<option value="freelance:{c.id}">{optionName(c)}</option>
 										{/each}
 									</optgroup>
 								{/if}
