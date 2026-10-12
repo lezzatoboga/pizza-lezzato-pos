@@ -3,6 +3,8 @@
 // langsung dengan role SELECT-only pos_reader (secret WEBSITE_CUSTOMERS_DB_URL,
 // Transaction pooler port 6543).
 // Dipanggil oleh: pg_cron tiap 15 menit, atau tombol "Sinkron" (izin sync_menu).
+// Selama saklar jeda aktif (sync_settings.customers_paused) fungsi ini tidak
+// menyentuh website dan tidak mencatat kegagalan.
 import postgres from 'npm:postgres@3.4.5';
 import { adminClient, corsHeaders, json } from '../_shared/http.ts';
 import { authorizeSync } from '../_shared/sync-auth.ts';
@@ -40,6 +42,15 @@ Deno.serve(async (req) => {
 	if (auth instanceof Response) return auth;
 
 	const admin = adminClient();
+
+	const { data: settings, error: settingsError } = await admin
+		.from('sync_settings')
+		.select('customers_paused')
+		.maybeSingle();
+	if (settingsError) return json({ error: settingsError.message }, 500);
+	if (settings?.customers_paused) {
+		return json({ ok: true, paused: true, customers: 0, skipped: 0 });
+	}
 
 	try {
 		let customers: WebsiteCustomer[];

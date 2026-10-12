@@ -289,18 +289,25 @@ export type MenuSyncRun = {
 	error: string | null;
 };
 
-// Hasil sinkron terakhir per jenis (menu, pelanggan).
-export async function lastSyncRuns(): Promise<MenuSyncRun[]> {
-	const rows = unwrap(
-		await supabase
-			.from('menu_sync_runs')
-			.select('kind, created_at, status, error')
-			.order('created_at', { ascending: false })
-			.limit(20)
-	) as MenuSyncRun[];
-	const latest = new Map<string, MenuSyncRun>();
-	for (const r of rows) if (!latest.has(r.kind)) latest.set(r.kind, r);
-	return [...latest.values()];
+export type SyncStatus = {
+	customers_paused: boolean;
+	customers_paused_at: string | null;
+	customers_paused_by: string | null;
+	customers_pause_note: string | null;
+	// Run terakhir per jenis (menu, pelanggan), sukses atau gagal.
+	last_runs: MenuSyncRun[];
+	last_success: { menu: string | null; customers: string | null };
+};
+
+export async function getSyncStatus(): Promise<SyncStatus> {
+	return unwrap(await supabase.rpc('get_sync_status')) as SyncStatus;
+}
+
+// Jeda / aktifkan kembali sinkron pelanggan (manage_settings).
+export async function setCustomerSyncPaused(paused: boolean, note: string): Promise<SyncStatus> {
+	return unwrap(
+		await supabase.rpc('set_customer_sync_paused', { p_paused: paused, p_note: note })
+	) as SyncStatus;
 }
 
 export async function syncMenuNow(): Promise<{
@@ -412,7 +419,11 @@ export async function searchCustomers(query: string): Promise<Customer[]> {
 	return unwrap(await supabase.rpc('search_customers', { p_query: query })) as Customer[];
 }
 
-export async function syncCustomersNow(): Promise<{ customers: number; skipped: number }> {
+export async function syncCustomersNow(): Promise<{
+	customers: number;
+	skipped: number;
+	paused?: boolean;
+}> {
 	const { data, error } = await supabase.functions.invoke('sync-customers', {
 		method: 'POST',
 		body: {}

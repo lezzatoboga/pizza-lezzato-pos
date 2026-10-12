@@ -1,26 +1,29 @@
 <script lang="ts">
-	// Tombol "Sinkron": menu lalu pelanggan dari website.
+	// Tombol "Sinkron": menu lalu pelanggan dari website. Selama sinkron
+	// pelanggan dijeda (Pengaturan → Sinkron), hanya menu yang disinkron dan
+	// indikator hanya menampilkan status menu.
 	import { onMount } from 'svelte';
 	import { friendlyError, timeOf } from '$lib/format';
-	import { lastSyncRuns, syncCustomersNow, syncMenuNow, type MenuSyncRun } from '$lib/pos/data';
+	import { getSyncStatus, syncCustomersNow, syncMenuNow, type SyncStatus } from '$lib/pos/data';
 	import { menuVersion } from '$lib/pos/menu-version.svelte';
+	import { dateTimeOf } from '$lib/pos/report';
 
 	const KIND_LABEL: Record<string, string> = { menu: 'Menu', customers: 'Pelanggan' };
 
-	let runs = $state<MenuSyncRun[]>([]);
+	let status = $state<SyncStatus | null>(null);
 	let syncing = $state(false);
 	let message = $state('');
 	let failures = $state<string[]>([]);
-	// Detail error ditampilkan lewat ketukan (bukan tooltip hover).
+	// Detail ditampilkan lewat ketukan (bukan tooltip hover).
 	let showDetail = $state(false);
 
 	onMount(refresh);
 
 	async function refresh() {
 		try {
-			runs = await lastSyncRuns();
+			status = await getSyncStatus();
 		} catch {
-			runs = [];
+			status = null;
 		}
 	}
 
@@ -39,11 +42,13 @@
 		} catch (e) {
 			failures.push(`Menu: ${friendlyError(e)}`);
 		}
-		try {
-			const result = await syncCustomersNow();
-			parts.push(`${result.customers} pelanggan`);
-		} catch (e) {
-			failures.push(`Pelanggan: ${friendlyError(e)}`);
+		if (!paused) {
+			try {
+				const result = await syncCustomersNow();
+				if (!result.paused) parts.push(`${result.customers} pelanggan`);
+			} catch (e) {
+				failures.push(`Pelanggan: ${friendlyError(e)}`);
+			}
 		}
 
 		message = parts.join(' · ');
@@ -51,7 +56,11 @@
 		await refresh();
 	}
 
-	// Gagal terakhir per jenis (dari log) atau dari sinkron manual barusan.
+	const paused = $derived(status?.customers_paused ?? false);
+	const runs = $derived((status?.last_runs ?? []).filter((r) => !paused || r.kind === 'menu'));
+
+	// Gagal terakhir (dari log, atau dari sinkron manual barusan). Selama
+	// pelanggan dijeda, hanya kegagalan menu yang dihitung.
 	const errorDetails = $derived(
 		failures.length
 			? failures
@@ -69,6 +78,15 @@
 				)
 			: null
 	);
+	const pauseInfo = $derived(
+		paused && status
+			? [
+					`Sinkron pelanggan dijeda${status.customers_paused_at ? ` sejak ${dateTimeOf(status.customers_paused_at)}` : ''}.`,
+					`Data pelanggan terakhir: ${status.last_success.customers ? dateTimeOf(status.last_success.customers) : 'belum pernah'}.`,
+					'Pelanggan baru tetap bisa diinput manual di kasir.'
+				]
+			: []
+	);
 </script>
 
 <div class="sync">
@@ -79,6 +97,10 @@
 	{#if errorDetails.length}
 		<button class="status failed" onclick={() => (showDetail = !showDetail)}>
 			Gagal {lastTime ?? ''} ⓘ
+		</button>
+	{:else if paused}
+		<button class="status" onclick={() => (showDetail = !showDetail)}>
+			Menu {lastTime ?? '–'} · Pelanggan dijeda
 		</button>
 	{:else}
 		<span class="status">
@@ -92,10 +114,13 @@
 		</span>
 	{/if}
 
-	{#if showDetail && errorDetails.length}
+	{#if showDetail && (errorDetails.length || pauseInfo.length)}
 		<div class="detail" role="alert">
 			{#each errorDetails as detail (detail)}
 				<p>{detail}</p>
+			{/each}
+			{#each pauseInfo as info (info)}
+				<p class="info">{info}</p>
 			{/each}
 			<button class="btn-ghost" onclick={() => (showDetail = false)}>Tutup</button>
 		</div>
@@ -142,6 +167,9 @@
 		margin: 0 0 0.5rem;
 		color: var(--danger);
 		overflow-wrap: anywhere;
+	}
+	.detail p.info {
+		color: var(--text);
 	}
 	.detail button {
 		margin-top: 0.25rem;

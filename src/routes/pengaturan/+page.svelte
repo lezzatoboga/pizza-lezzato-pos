@@ -6,17 +6,22 @@
 	import NamedListEditor from '$lib/components/NamedListEditor.svelte';
 	import { friendlyError, rupiah } from '$lib/format';
 	import {
+		getSyncStatus,
 		loadSettings,
 		saveBankAccount,
 		saveCourier,
+		setCustomerSyncPaused,
 		setDeliveryRate,
 		setPaymentMethodActive,
 		updatePlatformMarkup,
-		type SettingsData
+		type SettingsData,
+		type SyncStatus
 	} from '$lib/pos/data';
+	import { dateTimeOf } from '$lib/pos/report';
 	import { shippingFromDistance } from '$lib/pos/pricing';
 
-	type Tab = 'markup' | 'ongkir' | 'kurir' | 'rekening' | 'metode' | 'struk' | 'printer';
+	type Tab =
+		'markup' | 'ongkir' | 'kurir' | 'rekening' | 'metode' | 'struk' | 'printer' | 'sinkron';
 
 	const canMarkup = $derived(auth.can('edit_markup'));
 	const tabs = $derived(
@@ -28,7 +33,8 @@
 				['rekening', 'Rekening bank'],
 				['metode', 'Metode bayar'],
 				['struk', 'Template struk'],
-				['printer', 'Printer']
+				['printer', 'Printer'],
+				['sinkron', 'Sinkron']
 			] as [Tab, string][]
 		).filter(([t]) => t !== 'markup' || canMarkup)
 	);
@@ -43,6 +49,8 @@
 	// Draft input
 	let markupDrafts = $state<Record<string, string>>({});
 	let rateInput = $state('');
+	let sync = $state<SyncStatus | null>(null);
+	let pauseNote = $state('');
 
 	const activeTab = $derived(tab ?? tabs[0]?.[0] ?? 'ongkir');
 	const rate = $derived(Number(rateInput.replace(/\D/g, '')) || 0);
@@ -51,7 +59,7 @@
 
 	async function reload() {
 		try {
-			data = await loadSettings();
+			[data, sync] = await Promise.all([loadSettings(), getSyncStatus()]);
 			rateInput = String(data.outlet.delivery_rate_per_km);
 			markupDrafts = {};
 		} catch (e) {
@@ -211,6 +219,83 @@
 					<PrinterTest />
 				{:else if activeTab === 'struk'}
 					<ReceiptTemplate outletId={data.outlet.id} />
+				{:else if activeTab === 'sinkron' && sync}
+					{@const menuRun = sync.last_runs.find((r) => r.kind === 'menu')}
+					<h2>Sinkron dari website</h2>
+					<p class="muted">
+						Menu disinkron otomatis tiap 15 menit; pelanggan juga, kecuali sedang dijeda.
+					</p>
+
+					<dl class="sync-info">
+						<dt>Menu</dt>
+						<dd>
+							{#if menuRun}
+								{menuRun.status === 'success' ? 'Berhasil' : 'Gagal'} · {dateTimeOf(
+									menuRun.created_at
+								)}
+								{#if menuRun.status !== 'success' && menuRun.error}
+									<span class="sync-error">{menuRun.error}</span>
+								{/if}
+							{:else}
+								Belum pernah
+							{/if}
+						</dd>
+						<dt>Pelanggan</dt>
+						<dd>
+							<strong class:paused={sync.customers_paused}>
+								{sync.customers_paused ? 'Dijeda' : 'Aktif'}
+							</strong>
+							{#if sync.customers_paused && sync.customers_paused_at}
+								sejak {dateTimeOf(sync.customers_paused_at)}{sync.customers_paused_by
+									? ` oleh ${sync.customers_paused_by}`
+									: ''}
+							{/if}
+						</dd>
+						{#if sync.customers_paused && sync.customers_pause_note}
+							<dt>Alasan</dt>
+							<dd>{sync.customers_pause_note}</dd>
+						{/if}
+						<dt>Data pelanggan terakhir</dt>
+						<dd>
+							{sync.last_success.customers
+								? dateTimeOf(sync.last_success.customers)
+								: 'Belum pernah'}
+						</dd>
+					</dl>
+
+					{#if sync.customers_paused}
+						<p class="muted">
+							Selama dijeda, pencarian pelanggan di kasir memakai data terakhir di atas; pelanggan
+							baru tetap bisa diinput manual. Aktifkan kembali hanya setelah akses baca pelanggan
+							website dibuka lagi — kalau belum, sinkron akan gagal terus.
+						</p>
+						<button
+							class="btn-primary"
+							disabled={busy}
+							onclick={() =>
+								run(async () => {
+									await setCustomerSyncPaused(false, '');
+								}, 'Sinkron pelanggan diaktifkan kembali')}
+						>
+							Aktifkan kembali sinkron pelanggan
+						</button>
+					{:else}
+						<label class="pause-note">
+							<span>Alasan jeda (opsional)</span>
+							<input class="input" bind:value={pauseNote} maxlength="200" />
+						</label>
+						<button
+							class="btn-primary"
+							disabled={busy}
+							onclick={() =>
+								run(async () => {
+									await setCustomerSyncPaused(true, pauseNote);
+									pauseNote = '';
+								}, 'Sinkron pelanggan dijeda')}
+						>
+							Jeda sinkron pelanggan
+						</button>
+					{/if}
 				{/if}
 
 				<p class="error" role="alert">{error}</p>
@@ -233,6 +318,35 @@
 	h2 {
 		margin: 0 0 0.25rem;
 		font-size: 1.1rem;
+	}
+	.sync-info {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.4rem 1.25rem;
+		margin: 1rem 0;
+	}
+	.sync-info dt {
+		color: var(--muted);
+	}
+	.sync-info dd {
+		margin: 0;
+	}
+	.sync-error {
+		display: block;
+		color: var(--danger);
+		font-size: 0.9rem;
+	}
+	.paused {
+		color: #8a5300;
+	}
+	.pause-note {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		max-width: 28rem;
+		margin-bottom: 0.75rem;
+		color: var(--muted);
+		font-size: 0.9rem;
 	}
 	.denied {
 		text-align: center;
