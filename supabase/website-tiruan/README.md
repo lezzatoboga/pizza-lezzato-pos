@@ -7,7 +7,7 @@ yang sama dengan produksi (termasuk schema `pos`), data **rekaan**, dan peran `p
 
 - Acuan aturan & keputusan: [KONTRAK-DATA-POS.md](KONTRAK-DATA-POS.md) (salinan dari repo website).
 - Versi paket & sidik jari berkas: [VERSI.txt](VERSI.txt).
-- Dibuat oleh sesi website (`scripts/buat-paket-website-tiruan.mjs`). **Jangan mengedit `01_` dan `03_`
+- Dibuat oleh sesi website (`scripts/buat-paket-website-tiruan.mjs`). **Jangan mengedit `01_`, `02_`, dan `03_`
   secara manual** — minta paket baru dari sesi website bila skema/kontrak berubah.
 
 ## Isi paket
@@ -16,7 +16,7 @@ yang sama dengan produksi (termasuk schema `pos`), data **rekaan**, dan peran `p
 |---|---|---|
 | `00_HANYA_postgres_biasa.sql` | peran tiruan Supabase (`anon`, `authenticated`, `service_role`, `authenticator`) | **hanya** jalur cadangan tanpa Docker — LEWATI di Supabase lokal |
 | `01_skema_website.sql` | 59 migrasi website (urut) = skema produksi + tiruan `pg_cron` | sekali, di database kosong |
-| `02_peran_pos_lokal.sql` | `pos_reader` & `pos_status_writer` (LOGIN, kata sandi uji lokal) + hak akses tahap 5 | sesudah `01` |
+| `02_peran_pos_lokal.sql` | **persis** `APPLY_KONTRAK_POS_2_PERAN.sql` produksi (hak & pengaturan peran tahap 5) + LOGIN & kata sandi uji lokal | sesudah `01`; aman diulang |
 | `03_data_rekaan.sql` | menu (58 item dari kode), pengaturan ongkir, go-live 20 hari lalu, 8 pelanggan & 12 pesanan rekaan | sesudah `01`; **aman diulang** (reset data rekaan) |
 | `04_cek_pemasangan.sql` | satu baris bukti pemasangan | sesudah `03` |
 | `05_alat_uji.sql` | potongan SQL meniru kejadian sisi website (bayar lunas, verifikasi admin, saklar go-live, …) | sesuai kebutuhan uji |
@@ -80,9 +80,13 @@ Jalur cadangan tanpa Docker (Postgres biasa, mis. WSL): buat database `website_t
   **pooler** Supabase (`<peran>.<project-ref>`, TLS, mode transaksi port 6543) — klien harus **tanpa
   prepared statement**; pakai klien & opsi yang sama sejak uji lokal.
 - `pos_reader` hanya boleh membaca `pos.v_pesanan`, `pos.v_item_pesanan`, `pos.v_pelanggan`,
-  `pos.v_pengaturan_ongkir` (read-only, kueri maks. 5 dtk, maks. 3 koneksi).
+  `pos.v_pengaturan_ongkir` (read-only, kueri maks. 5 dtk, transaksi menganggur maks. 30 dtk, maks. 3 koneksi).
 - `pos_status_writer` hanya boleh `select pos.pos_set_order_status(<id>, <status>, <diubah_kasir>)`
-  (maks. 2 koneksi) — **tidak bisa SELECT apa pun**; id pesanan diambil dari `v_pesanan` lewat `pos_reader`.
+  (kueri maks. 5 dtk, menunggu kunci baris maks. 3 dtk, menganggur maks. 30 dtk, maks. 2 koneksi) —
+  **tidak bisa SELECT apa pun**; id pesanan diambil dari `v_pesanan` lewat `pos_reader`.
+- Pengaturan itu **per peran** (sama dengan produksi). Galat `55P03` (*lock timeout*), `57014`
+  (*statement timeout*) dan koneksi terputus = **kirim ulang** (fungsi idempoten), bukan penolakan kontrak.
+- Produksi kelak: secret POS `WEBSITE_POS_READER_DB_URL` & `WEBSITE_POS_STATUS_DB_URL` (diisi Owner, tahap 7).
 
 ## Ringkasan kontrak (detail: KONTRAK-DATA-POS.md)
 
@@ -131,4 +135,6 @@ hanya bisa ditambah, jadi barisnya tetap — tidak mengganggu.
 Sesi website menjalankan `node scripts/buat-paket-website-tiruan.mjs` lalu menguji ulang. Owner
 mengganti **seluruh** folder di repo POS dengan folder baru, lalu sesi POS memasang ulang database
 (`drop database website_tiruan; create database website_tiruan;` → 01 → 02 → 03 → 04).
-Bandingkan `VERSI.txt` untuk tahu paket mana yang terpasang.
+Bandingkan `VERSI.txt` untuk tahu paket mana yang terpasang. Bila hanya `02_` yang berubah (mis. paket
+14 Okt: pengaturan per peran + `lock_timeout`/`idle_in_transaction_session_timeout`), cukup jalankan ulang
+`02_peran_pos_lokal.sql` lalu `04_cek_pemasangan.sql` — data tak tersentuh; sambungan lama perlu dibuka ulang.

@@ -1,4 +1,4 @@
-> Salinan dari repo website-pl, commit 3f547ec, 14 Okt 2026 (via paket website tiruan supabase/website-tiruan/). Sumber kebenaran ada di repo website — jangan diedit di sini.
+> Salinan dari repo website-pl, commit 8374a77, 14 Okt 2026 (via paket website tiruan supabase/website-tiruan/). Sumber kebenaran ada di repo website — jangan diedit di sini.
 
 # Kontrak Data Website ↔ POS
 
@@ -397,6 +397,7 @@ grant select on pos.v_pesanan, pos.v_item_pesanan, pos.v_pelanggan, pos.v_pengat
 grant execute on function public.pesanan_pos(timestamptz) to pos_reader;
 alter role pos_reader set default_transaction_read_only = on;
 alter role pos_reader set statement_timeout = '5s';
+alter role pos_reader set idle_in_transaction_session_timeout = '30s';  -- disetujui Owner 14 Okt
 alter role pos_reader connection limit 3;
 -- Tahap berikutnya, setelah POS pindah ke v_pelanggan:
 revoke select (id, name, phone, default_address, default_patokan, phone_verified) on public.customers from pos_reader;
@@ -494,10 +495,18 @@ Hanya bisa ditambah (UPDATE/DELETE dicabut dari semua role, pola `admin_audit`).
 ```sql
 create role pos_status_writer nologin noinherit connection limit 2;  -- login & password: Owner, tahap 7 (go-live masih NULL → fungsi menolak semua)
 alter role pos_status_writer set statement_timeout = '5s';
+alter role pos_status_writer set lock_timeout = '3s';                        -- disetujui Owner 14 Okt
+alter role pos_status_writer set idle_in_transaction_session_timeout = '30s';
 grant usage on schema pos to pos_status_writer;
 grant execute on function pos.pos_set_order_status(uuid, text, boolean) to pos_status_writer;
 -- tanpa grant tabel/view apa pun; tanpa usage schema public
 ```
+
+Berkas produksi: `supabase/APPLY_KONTRAK_POS_2_PERAN.sql` (+ `CEK_SEBELUM_…`, `ROLLBACK_…`), ditulis & diuji 14 Okt.
+
+**Galat yang boleh dikirim ulang** (bukan penolakan kontrak; POS mengulang, tidak menampilkannya sebagai
+galat pesanan): SQLSTATE `55P03` *lock timeout* (pesanan sedang dikunci transaksi lain > 3 dtk), `57014`
+*statement timeout*, dan koneksi diputus (transaksi menganggur > 30 dtk, jaringan). Fungsi idempoten.
 
 Koneksi lewat pooler Supabase memakai user `pos_status_writer.<project-ref>`. Password hanya di
 secret POS + password manager Owner; masuk `docs/CHECKLIST-ROTASI-KUNCI.md`.
