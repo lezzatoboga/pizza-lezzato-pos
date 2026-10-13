@@ -421,3 +421,6 @@ verify_jwt = false
 
 [functions.sync-customers]
 verify_jwt = false
+
+[functions.web-orders-sync]
+verify_jwt = false

@@ -5,6 +5,8 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { auth } from '$lib/auth/auth.svelte';
 	import MenuSyncButton from '$lib/components/MenuSyncButton.svelte';
+	import WebOrderAlert from '$lib/components/WebOrderAlert.svelte';
+	import { webAlerts } from '$lib/pos/web-alerts.svelte';
 	import './app.css';
 
 	let { children } = $props();
@@ -47,6 +49,11 @@
 				<strong class="brand">Pizza Lezzato POS</strong>
 				<nav>
 					<a href="/" class:active={page.url.pathname === '/'}>Kasir</a>
+					<a href="/pesanan-web" class:active={page.url.pathname === '/pesanan-web'}>
+						Pesanan Web
+						{#if webAlerts.unopened.length}<span class="badge">{webAlerts.unopened.length}</span
+							>{/if}
+					</a>
 					<a href="/transaksi" class:active={page.url.pathname === '/transaksi'}>Transaksi</a>
 					<a href="/shift" class:active={page.url.pathname === '/shift'}>Shift</a>
 					{#if auth.can('view_sales_report') || auth.can('view_transaction_detail') || auth.can('view_finance_report')}
@@ -69,6 +76,7 @@
 				<button class="btn-ghost" onclick={logout}>Keluar</button>
 			</div>
 		</header>
+		<WebOrderAlert />
 	{/if}
 	<main>
 		{@render children()}
@@ -113,6 +121,19 @@
 		color: var(--muted);
 		text-decoration: none;
 		font-weight: 600;
+	}
+	.badge {
+		display: inline-grid;
+		place-items: center;
+		min-width: 1.4rem;
+		height: 1.4rem;
+		margin-left: 0.35rem;
+		padding: 0 0.35rem;
+		border-radius: 999px;
+		background: var(--brand);
+		color: #fff;
+		font-size: 0.8rem;
+		font-weight: 700;
 	}
 	nav a.active {
 		background: var(--brand-soft);

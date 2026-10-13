@@ -17,6 +17,8 @@ export type PrintItem = {
 	package_items: string[] | null;
 	package_choices: { key: string; label: string; value: string }[] | null;
 	package_note: string | null;
+	// Item pesanan website yang tak terpetakan ke menu POS → tiket dapur "PERIKSA".
+	mapping_warning?: string | null;
 	addons: { name: string; qty: number; unit_price: number }[];
 };
 
@@ -24,6 +26,8 @@ export type PrintData = {
 	id: string;
 	outlet_id: string;
 	transaction_number: string;
+	// Kode pesanan website (order_code); null untuk channel lain.
+	web_order_code?: string | null;
 	created_at: string;
 	channel: 'admin_toko' | 'website' | 'marketplace';
 	sales_type: 'dine_in' | 'take_away' | 'delivery';
@@ -88,15 +92,15 @@ function reprintBanner(doc: EscPos) {
 // Isi item bersama (tanpa harga) — dipakai tiket dapur & struk.
 function writeItemDetails(doc: EscPos, item: PrintItem, kitchen: boolean) {
 	for (const a of item.addons) doc.wrap(`+ ${a.name}${a.qty > 1 ? ` x${a.qty}` : ''}`, 3);
-	if (item.item_type === 'package') {
-		if (kitchen) for (const p of item.package_items ?? []) doc.wrap(`- ${p}`, 3);
-		for (const c of item.package_choices ?? []) {
-			const text = `${c.label}: ${kitchen ? c.value.toUpperCase() : c.value}`;
-			if (kitchen) doc.bold(true).wrap(text, 3).bold(false);
-			else doc.wrap(text, 3);
-		}
-		if (item.package_note) doc.wrap(item.package_note, 3);
+	if (item.item_type === 'package' && kitchen)
+		for (const p of item.package_items ?? []) doc.wrap(`- ${p}`, 3);
+	// Pilihan paket — juga pilihan item biasa dari pesanan website (mis. saus Rice Box).
+	for (const c of item.package_choices ?? []) {
+		const text = `${c.label}: ${kitchen ? c.value.toUpperCase() : c.value}`;
+		if (kitchen) doc.bold(true).wrap(text, 3).bold(false);
+		else doc.wrap(text, 3);
 	}
+	if (item.item_type === 'package' && item.package_note) doc.wrap(item.package_note, 3);
 	if (item.notes) doc.wrap(`"${item.notes}"`, 3);
 }
 
@@ -109,21 +113,33 @@ export function kitchenTicket(data: PrintData): Uint8Array {
 	const { time } = dateTime(data.created_at);
 	doc.rule('=');
 	doc.pair(data.transaction_number, time);
-	doc.align('center').size(2).bold(true).line(SALES_TYPE_TEXT[data.sales_type]).size(1).bold(false);
+	// Tipe pesanan besar untuk semua channel (dine-in perlu persiapan alat makan).
+	// Pesanan website memakai istilah website: Take away = "PICK UP".
+	const typeText =
+		data.channel === 'website' && data.sales_type === 'take_away'
+			? 'PICK UP'
+			: SALES_TYPE_TEXT[data.sales_type];
+	doc.align('center').size(2).bold(true).line(typeText).size(1).bold(false);
 
-	if (data.channel === 'marketplace') {
+	if (data.channel === 'website') {
+		doc.line('WEBSITE');
+		if (data.web_order_code) doc.size(2).bold(true).line(data.web_order_code).size(1).bold(false);
+		if (data.customer_name) doc.bold(true).wrap(data.customer_name).bold(false);
+	} else if (data.channel === 'marketplace') {
 		// Nama platform + kode pesanan huruf besar.
 		doc.line((data.platform_name ?? 'Marketplace').toUpperCase());
 		if (data.customer_name)
 			doc.size(2).bold(true).wrap(data.customer_name.toUpperCase(), 0, 16).size(1).bold(false);
 	} else {
-		doc.line(data.channel === 'website' ? 'Website' : 'Admin toko');
+		doc.line('Admin toko');
 		if (data.customer_name) doc.bold(true).wrap(data.customer_name).bold(false);
 	}
 	doc.align('left').rule();
 
 	for (const item of data.items) {
 		doc.size(1, 2).bold(true).wrap(`${item.qty}x ${item.product_name}`).size(1).bold(false);
+		if (item.mapping_warning)
+			doc.bold(true).wrap(`!! PERIKSA: ${item.mapping_warning}`, 3).bold(false);
 		if (item.variant_name) doc.line(`   ${item.variant_name.toUpperCase()}`);
 		writeItemDetails(doc, item, true);
 	}
@@ -146,6 +162,7 @@ export function receipt(data: PrintData, settings: ReceiptSettings | null): Uint
 	const { date, time } = dateTime(data.created_at);
 	doc.rule('=');
 	doc.line(data.transaction_number);
+	if (data.web_order_code) doc.line(`Pesanan web: ${data.web_order_code}`);
 	doc.pair(`${date} ${time}`, data.cashier_name ? `Kasir: ${data.cashier_name}` : '');
 
 	const channel =
@@ -158,7 +175,9 @@ export function receipt(data: PrintData, settings: ReceiptSettings | null): Uint
 		data.sales_type === 'dine_in'
 			? 'Dine-in'
 			: data.sales_type === 'take_away'
-				? 'Take away'
+				? data.channel === 'website'
+					? 'Pick Up'
+					: 'Take away'
 				: 'Delivery';
 	doc.line(`${channel} - ${salesType}`);
 	// Nomor HP pelanggan sengaja tidak dicetak.
