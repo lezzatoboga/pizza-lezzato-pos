@@ -75,13 +75,17 @@ async function sendOutbox(
 				failed++;
 				if (res.code === 'sebelum_go_live') inactive = true;
 			} else {
+				// Sementara (menunggu_admin, sibuk 55P03, timeout 57014, jaringan): antre ulang
+				// dengan jeda bertahap — tidak pernah ditandai gagal.
 				await admin.rpc('web_outbox_mark', {
 					p_id: row.id,
 					p_outcome: 'retry',
-					p_error: res.code === 'jaringan' ? res.message.slice(0, 300) : res.code
+					p_error: res.rule ? res.code : `${res.code}: ${res.message}`.slice(0, 300)
 				});
 				retry++;
-				if (res.code === 'jaringan') return true; // website tak terjangkau: sisanya menunggu run berikutnya
+				// Website tak terjangkau: sisanya menunggu run berikutnya. 'sibuk' hanya
+				// mengenai satu pesanan — lanjutkan pesanan lain.
+				if (res.code === 'jaringan' || res.code === 'timeout') return true;
 			}
 		}
 		return false;
@@ -314,7 +318,9 @@ Deno.serve(async (req) => {
 		return json({ ok: checks.every((c) => c.lolos), checks });
 	}
 
-	const { data: token, error: leaseError } = await admin.rpc('web_bridge_lease', { p_seconds: 60 });
+	const { data: token, error: leaseError } = await admin.rpc('web_bridge_lease', {
+		p_seconds: 120
+	});
 	if (leaseError) return json({ error: leaseError.message }, 500);
 	if (!token) return json({ ok: true, busy: true });
 

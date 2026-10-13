@@ -30,9 +30,25 @@ const RULE_ERRORS = new Set([
 	'pembayaran_berjalan'
 ]);
 
+// Galat SEMENTARA (kontrak §2.2, 14 Okt): bukan penolakan pesanan — POS mengirim ulang
+// lewat antrean (fungsi website idempoten). Selain kode di bawah, semua galat non-P0001
+// (koneksi ditolak/terputus, DNS, TLS, sesi diakhiri server 57P0x) = 'jaringan'.
+//   55P03 lock_not_available → 'sibuk'   (pesanan dikunci transaksi lain > lock_timeout 3 dtk)
+//   57014 query_canceled     → 'timeout' (statement_timeout 5 dtk)
+const TRANSIENT_SQLSTATE: Record<string, string> = { '55P03': 'sibuk', '57014': 'timeout' };
+
 export type StatusResult =
 	| { ok: true; result: Record<string, unknown> }
 	| { ok: false; code: string; message: string; rule: boolean };
+
+export function classifyStatusError(e: unknown): Extract<StatusResult, { ok: false }> {
+	const message = (e as Error)?.message ?? String(e);
+	const sqlstate = (e as { code?: string })?.code ?? '';
+	const code = /^([a-z_]+)\b/.exec(message)?.[1] ?? '';
+	if (sqlstate === 'P0001' && RULE_ERRORS.has(code))
+		return { ok: false, code, message, rule: true };
+	return { ok: false, code: TRANSIENT_SQLSTATE[sqlstate] ?? 'jaringan', message, rule: false };
+}
 
 export async function setOrderStatus(
 	sql: Sql,
@@ -46,10 +62,7 @@ export async function setOrderStatus(
 		`;
 		return { ok: true, result: row.r as Record<string, unknown> };
 	} catch (e) {
-		const message = (e as Error).message ?? String(e);
-		const code = /^([a-z_]+)\b/.exec(message)?.[1] ?? '';
-		const rule = (e as { code?: string }).code === 'P0001' && RULE_ERRORS.has(code);
-		return { ok: false, code: rule ? code : 'jaringan', message, rule };
+		return classifyStatusError(e);
 	}
 }
 
@@ -65,7 +78,9 @@ export const STATUS_ERROR_TEXT: Record<string, string> = {
 	pesanan_tidak_ada: 'Pesanan tidak ditemukan di website.',
 	belum_lunas: 'Pembayaran online belum lunas.',
 	status_tidak_dikenal: 'Status tidak dikenal website.',
-	jaringan: 'Website tidak terjangkau — perubahan tidak disimpan. Coba lagi.'
+	jaringan: 'Website tidak terjangkau — perubahan tidak disimpan. Coba lagi.',
+	sibuk: 'Pesanan sedang diproses di website — perubahan tidak disimpan. Coba lagi sebentar.',
+	timeout: 'Website lambat menjawab — perubahan tidak disimpan. Coba lagi.'
 };
 
 // JSON polos (numeric → string/number apa adanya, Date → ISO).

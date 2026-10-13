@@ -52,7 +52,13 @@ Deno.serve(async (req) => {
 	const writer = websiteDb('writer');
 	if (!writer) return json({ error: 'Jembatan website belum dikonfigurasi' }, 503);
 	try {
-		const res = await setOrderStatus(writer, order.id, 'diterima', true);
+		let res = await setOrderStatus(writer, order.id, 'diterima', true);
+		// Galat sementara (sibuk 55P03, timeout 57014, koneksi putus): coba sekali lagi —
+		// aman, fungsi website idempoten. Masih gagal → 503, edit tidak disimpan.
+		if (!res.ok && !res.rule) {
+			await new Promise((r) => setTimeout(r, 1000));
+			res = await setOrderStatus(writer, order.id, 'diterima', true);
+		}
 		if (!res.ok) {
 			return json(
 				{ error: STATUS_ERROR_TEXT[res.code] ?? res.message, code: res.code },

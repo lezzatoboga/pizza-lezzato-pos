@@ -110,6 +110,21 @@ Catatan:
   (`sebelum_go_live`)**. Perilaku saat saklar menyala lagi: lihat
   `docs/SOP-SAKLAR-GO-LIVE.md` (kirim ulang otomatis status terakhir, 14 Okt 2026).
 
+## Galat sementara (kontrak 8374a77, 14 Okt 2026)
+
+Pengaturan peran sama dengan produksi (`APPLY_KONTRAK_POS_2`): `pos_status_writer`
+`lock_timeout` 3 dtk, `statement_timeout` 5 dtk, transaksi menganggur 30 dtk, maks. 2 koneksi.
+Galat berikut **bukan penolakan pesanan**:
+
+| Galat | Kode di POS | Sinkron (antrean) | Edit kasir |
+|---|---|---|---|
+| 55P03 lock timeout (pesanan dikunci transaksi lain) | `sibuk` | antre ulang (jeda 30 dtk → 10 mnt); pesanan lain di run yang sama tetap dikirim | coba sekali lagi otomatis; masih gagal → "Pesanan sedang diproses di website…", tidak disimpan |
+| 57014 statement timeout | `timeout` | antre ulang; sisa antrean menunggu run berikutnya | idem, "Website lambat menjawab…" |
+| koneksi ditolak/terputus (termasuk diputus server) | `jaringan` | antre ulang; sisa antrean menunggu run berikutnya | idem, "Website tidak terjangkau…" |
+
+Hanya kode aturan kontrak (P0001 + awalan kode §2.2) yang membuat status gagal permanen.
+Fungsi website idempoten, jadi kiriman ulang aman (diuji: tercatat sekali di `order_status_log`).
+
 ## Backlog Proyek B — pembayaran online (Midtrans)
 
 Keputusan Owner 13 Okt 2026 (setelah tahap A): untuk pesanan yang **sudah lunas online**
