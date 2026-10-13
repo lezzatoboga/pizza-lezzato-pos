@@ -15,7 +15,7 @@ yang sama dengan produksi (termasuk schema `pos`), data **rekaan**, dan peran `p
 | Berkas | Isi | Kapan dijalankan |
 |---|---|---|
 | `00_HANYA_postgres_biasa.sql` | peran tiruan Supabase (`anon`, `authenticated`, `service_role`, `authenticator`) | **hanya** jalur cadangan tanpa Docker — LEWATI di Supabase lokal |
-| `01_skema_website.sql` | 59 migrasi website (urut) = skema produksi + tiruan `pg_cron` | sekali, di database kosong |
+| `01_skema_website.sql` | 60 migrasi website (urut) = skema produksi + tiruan `pg_cron` | sekali, di database kosong |
 | `02_peran_pos_lokal.sql` | **persis** `APPLY_KONTRAK_POS_2_PERAN.sql` produksi (hak & pengaturan peran tahap 5) + LOGIN & kata sandi uji lokal | sesudah `01`; aman diulang |
 | `03_data_rekaan.sql` | menu (58 item dari kode), pengaturan ongkir, go-live 20 hari lalu, 8 pelanggan & 12 pesanan rekaan | sesudah `01`; **aman diulang** (reset data rekaan) |
 | `04_cek_pemasangan.sql` | satu baris bukti pemasangan | sesudah `03` |

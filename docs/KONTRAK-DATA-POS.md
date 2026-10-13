@@ -1,4 +1,4 @@
-> Salinan dari repo website-pl, commit 8374a77, 14 Okt 2026 (via paket website tiruan supabase/website-tiruan/). Sumber kebenaran ada di repo website — jangan diedit di sini.
+> Salinan dari repo website-pl, paket website tiruan commit 587e9dd, 14 Okt 2026 (isi kontrak sama dengan 8374a77; via supabase/website-tiruan/). Sumber kebenaran ada di repo website — jangan diedit di sini.
 
 # Kontrak Data Website ↔ POS
 

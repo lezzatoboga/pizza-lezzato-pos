@@ -1,14 +1,14 @@
 Paket database website tiruan — Pizza Lezzato
-Dibuat      : 2026-10-13T23:13:20.862Z (scripts/buat-paket-website-tiruan.mjs)
-Commit web  : 8374a77
-Migrasi     : 59 berkas, terakhir 20261013122000_kontrak_pos_1c_skema_pos.sql
+Dibuat      : 2026-10-13T23:26:18.956Z (scripts/buat-paket-website-tiruan.mjs)
+Commit web  : 587e9dd
+Migrasi     : 60 berkas, terakhir 20261014120000_kontrak_pos_2_peran.sql
 Data rekaan : 58 menu, 55 varian, 8 pelanggan, 12 pesanan
 Sidik jari (sha256, 16 karakter pertama):
   04505cb5bb58345a  00_HANYA_postgres_biasa.sql
-  9f00e66db1434112  01_skema_website.sql
+  14d7cc884fcf1c47  01_skema_website.sql
   12b0494e0ed7cf7a  02_peran_pos_lokal.sql
   6c2f9d8a7b00ad0a  03_data_rekaan.sql
   0c7f4073f6d591c6  04_cek_pemasangan.sql
   ef5a179d7f853cc4  05_alat_uji.sql
   f4a684c30e71a19b  KONTRAK-DATA-POS.md
-  553dbc71d4982008  README.md
+  de39b036082dd8bc  README.md
