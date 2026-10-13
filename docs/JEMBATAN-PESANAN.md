@@ -104,7 +104,7 @@ Perubahan dari uji ini:
 
 Catatan:
 
-- Dari Edge Function lokal, host database = **`db`** (README paket menyebut
+  `supabase_db_<project_id>`, ditolak Deno — README paket sudah diperbaiki di 3f547ec).
   `supabase_db_<project_id>`; nama bergaris bawah ditolak Deno).
 - Saat saklar go-live dikosongkan, status yang sedang antre ditandai **gagal
   (`sebelum_go_live`)** dan tidak dikirim ulang setelah go-live diisi lagi — selama saklar

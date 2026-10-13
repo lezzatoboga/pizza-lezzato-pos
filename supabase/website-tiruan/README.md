@@ -69,8 +69,12 @@ Jalur cadangan tanpa Docker (Postgres biasa, mis. WSL): buat database `website_t
 
 | Peran | Dari laptop | Dari Edge Function (di dalam Docker) |
 |---|---|---|
-| `pos_reader` | `postgresql://pos_reader:lokal-pos-reader-uji@127.0.0.1:54322/website_tiruan` | host `supabase_db_<project_id>` port `5432` (atau `host.docker.internal:54322`) |
-| `pos_status_writer` | `postgresql://pos_status_writer:lokal-pos-status-writer-uji@127.0.0.1:54322/website_tiruan` | sama |
+| `pos_reader` | `postgresql://pos_reader:lokal-pos-reader-uji@127.0.0.1:54322/website_tiruan` | `postgresql://pos_reader:lokal-pos-reader-uji@db:5432/website_tiruan` |
+| `pos_status_writer` | `postgresql://pos_status_writer:lokal-pos-status-writer-uji@127.0.0.1:54322/website_tiruan` | `postgresql://pos_status_writer:lokal-pos-status-writer-uji@db:5432/website_tiruan` |
+
+- Dari Edge Function **pakai host `db`** (alias jaringan Docker Supabase lokal), **bukan**
+  `supabase_db_<project_id>`: nama bergaris bawah ditolak resolver DNS Deno (masukan sesi POS, tahap B).
+  Nama kontainer `supabase_db_<project_id>` tetap benar untuk `docker exec` (langkah 3).
 
 - Simpan URL di berkas env lokal Edge Function (tidak di-commit). URL produksi kelak berbeda: lewat
   **pooler** Supabase (`<peran>.<project-ref>`, TLS, mode transaksi port 6543) — klien harus **tanpa

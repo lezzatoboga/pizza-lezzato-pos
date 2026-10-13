@@ -815,7 +815,7 @@ aktif — website & POS sudah terpakai; tidak berlangganan). Bagian ini menggant
 |---|---|---|---|
 | Edge Function jembatan | ✓ `supabase functions serve` | ✗ (skrip Deno) | penjadwal 30 dtk lokal dipicu skrip/loop; penjadwal produksi → X3 |
 | `pos_reader`/`pos_status_writer` LOGIN + kata sandi, grant, read-only, `statement_timeout`, batas koneksi | ✓ sungguhan | ✓ sungguhan | yang tak bisa di PGlite |
-| Koneksi langsung | ✓ dari jaringan Docker (`supabase_db_<id>:5432/website_tiruan`), dari laptop `localhost:54322` | ✓ `localhost:5434` | |
+| Koneksi langsung | ✓ dari jaringan Docker (host `db`: `db:5432/website_tiruan` — bukan `supabase_db_<id>`, ditolak DNS Deno), dari laptop `localhost:54322` | ✓ `localhost:5434` | |
 | Pooler (Supavisor) | ragu — pooler lokal opsional (`[db.pooler]`), format user & TLS berbeda dari produksi | ✗ | produksi: user `pos_reader.<project-ref>`, TLS, mode transaksi port 6543 → klien **tanpa prepared statement**. Lokal memakai klien & opsi yang sama; pembuktian di produksi X1–X2 (aman) |
 | Banyak koneksi bersamaan (`for update`, balapan penanda vs tagihan online) | ✓ | ✓ | menutup batasan PGlite #25 |
 | Bentuk data pesanan | rekaan lewat `create_order` sungguhan, item JSON dari logika `resolveOrderItems` (fixture diekspor kode website) | sama | tanpa data pelanggan sungguhan |
