@@ -4,7 +4,7 @@
 // Koneksi Postgres langsung (pooler mode transaksi → tanpa prepared statement):
 //   WEBSITE_POS_READER_DB_URL  role pos_reader         — SELECT view schema pos
 //   WEBSITE_POS_STATUS_DB_URL  role pos_status_writer  — EXECUTE pos_set_order_status
-// Lokal: diarahkan ke DB website tiruan (supabase/dev/website-stub.sql).
+// Lokal: diarahkan ke database website_tiruan (paket supabase/website-tiruan/).
 import postgres from 'npm:postgres@3.4.5';
 
 export type Sql = ReturnType<typeof postgres>;

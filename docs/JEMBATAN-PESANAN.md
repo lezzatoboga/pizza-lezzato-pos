@@ -73,7 +73,7 @@ di `transactions`, diisi oleh `mark_receipt_printed`).
   dibaca (galat *permission denied*). Sudah ada di paket
   (`supabase/website-tiruan/02_peran_pos_lokal.sql`) dan di kontrak §2.1; grant ini tetap
   berlaku sesudah tahap 8.
-- **Perbandingan dengan website tiruan mini tahap A** (`supabase/dev/website-stub.sql`): di sana
+- **Perbandingan dengan website tiruan mini tahap A** (`supabase/dev/website-stub.sql`, dihapus 14 Okt 2026): di sana
   muncul *permission denied for table stub_settings* dan diselesaikan dengan cara yang sama seperti paket resmi — fungsi
   go-live dibuat `SECURITY DEFINER` (agar bisa membaca pengaturan go-live yang tidak boleh dibaca
   `pos_reader`) **dan** `pos_reader` diberi EXECUTE pada fungsi itu. Bedanya hanya nama
