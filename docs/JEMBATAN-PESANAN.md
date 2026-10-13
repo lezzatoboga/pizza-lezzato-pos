@@ -1,18 +1,51 @@
 # Catatan: jembatan pesanan website ↔ POS
 
-Status: **DITUNDA** sampai fitur ongkir otomatis di website selesai (supaya skema pesanan
-website tidak disesuaikan dua kali). Pekerjaan di sisi website dikerjakan di project website,
-bukan dari repo POS; kebutuhan dari website ditulis sebagai permintaan untuk Owner.
+Status: **perencanaan** (dilanjutkan 13 Okt 2026). Kontrak data: `docs/KONTRAK-DATA-POS.md`
+(salinan dari repo website — sumber kebenaran di sana). Pekerjaan di sisi website dikerjakan di
+project website, bukan dari repo POS; kebutuhan dari website ditulis sebagai permintaan untuk
+Owner. Pengembangan POS dilakukan terhadap Supabase **lokal** (Bagian 6 kontrak).
 
-## Yang ditunggu sebelum dilanjutkan
+## Keputusan Owner 13 Okt 2026
 
-- Jawaban Owner untuk pertanyaan desain B1–B7 (akan dikirim lengkap saat dilanjutkan; jawabannya
-  berbeda dari usulan awal, jadi jangan dianggap disetujui).
-- Skema pesanan website yang baru setelah ongkir otomatis (termasuk kolom ongkir dan pembayaran).
-- Satu sumber tarif ongkir per km (saat ini ada di Pengaturan POS dan di pengaturan website).
-- Akses baca data website untuk POS: role `pos_reader` sengaja dinonaktifkan di sisi website;
-  pengaktifannya dibahas bersama kontrak data jembatan ini (sinkron pelanggan POS dijeda selama
-  itu — Pengaturan → Sinkron).
+### Jawaban B1–B7 (final, disesuaikan dengan kontrak)
+
+1. **Penarikan pesanan:** POS menarik pesanan setiap **30 detik** dari view schema `pos` lewat
+   `pos_reader`, ditambah tombol **"Cek pesanan"**.
+2. **Status yang dikirim** lewat `pos_set_order_status`:
+   - pesanan masuk ke POS → `diterima`;
+   - **Konfirmasi & Proses** → `diproses`;
+   - tombol **"Siap"**: Pick Up dan Dine-in → `siap_diambil` (website menampilkan "Siap
+     disajikan" untuk dine-in); Delivery → `sedang_diantar`. Label tombol menyesuaikan tipe
+     pesanan;
+   - **"Selesai"** lewat **tombol** kasir, tidak otomatis saat lunas;
+   - void → `dibatalkan` (dipetakan website ke `batal`).
+3. **Ongkir:** memakai angka tersimpan dari website. Kalau kasir mengubah ongkir atau item, itu
+   dihitung sebagai **edit kasir**.
+4. **Item tambahan dari kasir** memakai harga normal POS.
+5. **Shift:** pesanan tetap masuk dan tampil walau shift belum dibuka; **Konfirmasi & Proses**
+   menunggu shift dibuka.
+6. **Go-live:** tanggal go-live **tidak** diatur di Pengaturan POS — sumbernya `go_live_at` di
+   website. POS mengikuti apa yang dikembalikan view dan fungsi status.
+7. **Notifikasi:** bunyi **berulang** sampai pesanan dibuka kasir.
+
+### Aturan tambahan dari kontrak
+
+- **Edit kasir:** sebelum menyimpan perubahan item/ongkir, POS **wajib** mengirim penanda
+  `diubah_kasir` lewat `pos_set_order_status`. Kalau ditolak (`pembayaran_berjalan` /
+  `sudah_lunas_terkunci`), edit tidak boleh disimpan dan kasir mendapat pesan yang jelas. Pesanan
+  dengan `terkunci_edit` tidak bisa diedit sama sekali.
+- **`menunggu_admin`:** selama penanda ini ada, tombol Konfirmasi & Proses ditahan, dengan
+  keterangan "menunggu verifikasi admin website". Selalu pakai angka diskon/total dari header
+  terbaru.
+- **Item:** pakai kunci teknis di `options` (`_ukuran_key`, `_topping_ids`, dll.) bila ada;
+  pemetaan berbasis nama hanya untuk pesanan lama. Kalau gagal dipetakan, tampilkan teks aslinya
+  dengan tanda peringatan — jangan ditebak.
+- **Tiket dapur:** tipe pesanan (DELIVERY / PICK UP / DINE-IN) tercetak jelas dan besar — dine-in
+  perlu persiapan alat makan.
+- **Sinkron pelanggan:** kolom `created_at` tidak dipakai lagi; pakai `customers.updated_at` untuk
+  sinkron inkremental. Saklar jeda tetap dipakai sampai `pos_reader` aktif.
+- **Aturan CETAK ULANG:** tinjau ulang terhadap pembayaran online (lihat bagian di bawah).
+- **Kalkulator ongkir POS:** **tidak** termasuk tahap ini.
 
 ## Hal yang perlu ditinjau ulang saat jembatan/pembayaran online dikerjakan
 
