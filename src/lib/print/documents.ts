@@ -1,6 +1,7 @@
 // Tiket dapur & struk dari data transaksi (RPC get_transaction_print_data).
 // Kertas 58mm = 32 karakter per baris; huruf ukuran normal, jarak baris rapat
 // (COMPACT_LINE_SPACING di escpos.ts).
+import { isTestOrder } from '$lib/pos/test-order';
 import type { ReceiptSettings } from '$lib/pos/data';
 import { EscPos } from './escpos';
 import { isReceiptReprint, type ReceiptPrintedStatus } from './reprint';
@@ -124,6 +125,9 @@ export function kitchenTicket(data: PrintData): Uint8Array {
 	if (data.channel === 'website') {
 		doc.line('WEBSITE');
 		if (data.web_order_code) doc.size(2).bold(true).line(data.web_order_code).size(1).bold(false);
+		// Pesanan uji produksi (tahap D): dapur tidak membuatnya.
+		if (isTestOrder(data.notes, data.customer_name))
+			doc.size(2).bold(true).line('PESANAN UJI').size(1).line('JANGAN DIBUAT').bold(false);
 		if (data.customer_name) doc.bold(true).wrap(data.customer_name).bold(false);
 	} else if (data.channel === 'marketplace') {
 		// Nama platform + kode pesanan huruf besar.
@@ -163,6 +167,8 @@ export function receipt(data: PrintData, settings: ReceiptSettings | null): Uint
 	doc.rule('=');
 	doc.line(data.transaction_number);
 	if (data.web_order_code) doc.line(`Pesanan web: ${data.web_order_code}`);
+	if (data.channel === 'website' && isTestOrder(data.notes, data.customer_name))
+		doc.bold(true).line('PESANAN UJI').bold(false);
 	doc.pair(`${date} ${time}`, data.cashier_name ? `Kasir: ${data.cashier_name}` : '');
 
 	const channel =

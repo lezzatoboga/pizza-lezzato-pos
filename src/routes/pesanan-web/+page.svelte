@@ -15,6 +15,7 @@
 		loadWebOrders,
 		openWebOrder,
 		ORDER_TYPE_LABEL,
+		isTestWebOrder,
 		outboxState,
 		statusText,
 		syncWebOrders,
@@ -166,6 +167,7 @@
 								<strong>{rupiah(tx?.total ?? o.header.total)}</strong>
 							</span>
 							<span class="tags">
+								{#if isTestWebOrder(o.header)}<span class="tag test">UJI</span>{/if}
 								{#if !o.opened_at}<span class="tag new">BARU</span>{/if}
 								<span class="tag">{statusText(o)}</span>
 								{#if tx?.payment_status === 'paid'}<span class="tag ok">Lunas</span>{/if}
@@ -311,6 +313,10 @@
 	}
 	.tag.new {
 		background: var(--brand);
+		color: #fff;
+	}
+	.tag.test {
+		background: #1d4ed8;
 		color: #fff;
 	}
 	.tag.ok {

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { auth } from '$lib/auth/auth.svelte';
 	import ReceiptTemplate from '$lib/components/ReceiptTemplate.svelte';
 	import PrinterTest from '$lib/components/PrinterTest.svelte';
@@ -18,6 +19,16 @@
 		type SyncStatus
 	} from '$lib/pos/data';
 	import { dateTimeOf } from '$lib/pos/report';
+	import {
+		checkWebConnection,
+		loadResendIssues,
+		OUTBOX_ERROR_TEXT,
+		resolveResendIssue,
+		statusLabelOf,
+		type ConnectionCheck,
+		type ResendIssue
+	} from '$lib/pos/web-orders';
+	import { webAlerts } from '$lib/pos/web-alerts.svelte';
 	import { shippingFromDistance } from '$lib/pos/pricing';
 
 	type Tab =
@@ -39,7 +50,7 @@
 		).filter(([t]) => t !== 'markup' || canMarkup)
 	);
 
-	let tab = $state<Tab | null>(null);
+	let tab = $state<Tab | null>((page.url.searchParams.get('tab') as Tab | null) ?? null);
 	let data = $state<SettingsData | null>(null);
 	let loadError = $state('');
 	let busy = $state(false);
@@ -51,6 +62,11 @@
 	let rateInput = $state('');
 	let sync = $state<SyncStatus | null>(null);
 	let pauseNote = $state('');
+	// Jembatan pesanan website — khusus Owner.
+	const isOwner = $derived(auth.profile?.role.code === 'owner');
+	let checks = $state<ConnectionCheck[] | null>(null);
+	let checking = $state(false);
+	let issues = $state<ResendIssue[]>([]);
 
 	const activeTab = $derived(tab ?? tabs[0]?.[0] ?? 'ongkir');
 	const rate = $derived(Number(rateInput.replace(/\D/g, '')) || 0);
@@ -60,6 +76,7 @@
 	async function reload() {
 		try {
 			[data, sync] = await Promise.all([loadSettings(), getSyncStatus()]);
+			issues = isOwner ? await loadResendIssues() : [];
 			rateInput = String(data.outlet.delivery_rate_per_km);
 			markupDrafts = {};
 		} catch (e) {
@@ -87,6 +104,19 @@
 		tab = t;
 		error = '';
 		saved = '';
+	}
+
+	async function runChecks() {
+		checking = true;
+		checks = null;
+		error = '';
+		try {
+			checks = (await checkWebConnection()).checks;
+		} catch (e) {
+			error = friendlyError(e);
+		} finally {
+			checking = false;
+		}
 	}
 </script>
 
@@ -296,6 +326,79 @@
 							Jeda sinkron pelanggan
 						</button>
 					{/if}
+
+					{#if isOwner}
+						<h2 class="section">Jembatan pesanan website</h2>
+						<p class="muted">
+							Cek koneksi ke database website (uji X1–X2): hanya membaca dan memanggil fungsi status
+							dengan data yang pasti ditolak — tidak mengubah data apa pun.
+						</p>
+						<button class="btn-primary" disabled={checking} onclick={runChecks}>
+							{checking ? 'Mengecek…' : 'Cek koneksi website'}
+						</button>
+						{#if checks}
+							<p class="check-summary" class:bad={!checks.every((c) => c.lolos)}>
+								{checks.filter((c) => c.lolos).length} dari {checks.length} lolos
+							</p>
+							<table class="checks">
+								<thead>
+									<tr><th>Uji</th><th>Harapan</th><th>Hasil</th><th></th></tr>
+								</thead>
+								<tbody>
+									{#each checks as c, i (i)}
+										<tr class:bad={!c.lolos}>
+											<td>{c.kode} · {c.uji}</td>
+											<td>{c.harapan}</td>
+											<td class="result">{c.hasil}</td>
+											<td>{c.lolos ? 'LOLOS' : 'GAGAL'}</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						{/if}
+
+						<h3>Perlu diselesaikan manual</h3>
+						{#if issues.length === 0}
+							<p class="muted">
+								Tidak ada. Status yang ditolak website setelah saklar go-live menyala lagi muncul di
+								sini.
+							</p>
+						{:else}
+							<p class="muted">
+								Setelah saklar go-live menyala lagi, status terakhir POS untuk pesanan ini ditolak
+								website (dikirim ulang sekali, tidak dicoba lagi) atau tidak bisa dikirim karena
+								status akhirnya berbeda. Samakan di panel admin website atau di POS, lalu tandai
+								selesai. Lihat docs/SOP-SAKLAR-GO-LIVE.md.
+							</p>
+							<ul class="rows">
+								{#each issues as it (it.id)}
+									<li class="issue">
+										<span class="label">
+											<strong>{it.web_orders.order_code}</strong>
+											{it.web_orders.transactions?.transaction_number ?? ''} · POS:
+											{statusLabelOf(it.status)} · website: {statusLabelOf(
+												it.web_orders.web_status
+											)}
+											<span class="sync-error"
+												>{OUTBOX_ERROR_TEXT[it.last_error ?? ''] ?? it.last_error}</span
+											>
+										</span>
+										<button
+											class="btn-ghost"
+											disabled={busy}
+											onclick={() =>
+												run(async () => {
+													await resolveResendIssue(it.id);
+													await webAlerts.refresh();
+												}, `${it.web_orders.order_code} ditandai selesai`)}
+										>
+											Tandai selesai
+										</button>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					{/if}
 				{/if}
 
 				<p class="error" role="alert">{error}</p>
@@ -318,6 +421,39 @@
 	h2 {
 		margin: 0 0 0.25rem;
 		font-size: 1.1rem;
+	}
+	h2.section {
+		margin-top: 1.5rem;
+	}
+	h3 {
+		margin: 1.25rem 0 0.25rem;
+		font-size: 1rem;
+	}
+	.check-summary {
+		font-weight: 700;
+		color: #166534;
+	}
+	.check-summary.bad,
+	tr.bad td {
+		color: #b42318;
+	}
+	.checks {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+	}
+	.checks th,
+	.checks td {
+		text-align: left;
+		padding: 0.35rem 0.5rem;
+		border-bottom: 1px solid var(--border, #ddd);
+		vertical-align: top;
+	}
+	.checks .result {
+		word-break: break-word;
+	}
+	.issue .label {
+		flex: 1;
 	}
 	.sync-info {
 		display: grid;

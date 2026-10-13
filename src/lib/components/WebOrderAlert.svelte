@@ -7,6 +7,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { auth } from '$lib/auth/auth.svelte';
 	import { friendlyError } from '$lib/format';
 	import { webAlerts } from '$lib/pos/web-alerts.svelte';
 	import { voidSlipDone } from '$lib/pos/web-orders';
@@ -96,7 +97,23 @@
 
 	const first = $derived(webAlerts.unopened[0]);
 	const onOrdersPage = $derived(page.url.pathname === '/pesanan-web');
+	const isOwner = $derived(auth.profile?.role.code === 'owner');
 </script>
+
+{#if webAlerts.bridgeOff}
+	<div class="banner off" role="alert">
+		<strong>Jembatan website DIMATIKAN.</strong>
+		Pesanan web baru tidak masuk ke POS; status untuk pelanggan diurus admin di panel website. Bayar &
+		masak pesanan yang sudah ada tetap di POS.
+	</div>
+{/if}
+{#if webAlerts.manual > 0 && isOwner && page.url.pathname !== '/pengaturan'}
+	<div class="banner notice" role="status">
+		{webAlerts.manual} status pesanan web ditolak website setelah saklar go-live menyala lagi — selesaikan
+		manual.
+		<a class="link" href="/pengaturan?tab=sinkron">Pengaturan → Sinkron</a>
+	</div>
+{/if}
 
 {#if webAlerts.unopened.length > 0}
 	<div class="banner new" role="alert">
@@ -179,6 +196,17 @@
 		background: #fff;
 		color: var(--brand);
 		font-weight: 700;
+	}
+	.banner.off {
+		display: block;
+		background: #b42318;
+		color: #fff;
+	}
+	.link {
+		color: inherit;
+		font-weight: 700;
+		text-decoration: underline;
+		white-space: nowrap;
 	}
 	.banner.slip,
 	.banner.notice {

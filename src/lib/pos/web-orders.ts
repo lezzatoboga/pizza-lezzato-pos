@@ -2,6 +2,7 @@
 // Function web-orders-sync ke tabel web_orders + transaksi POS channel 'website';
 // aksi kasir lewat RPC (confirm/ready/finish) dan Edge Function web-order-edit.
 import { supabase } from '$lib/supabase/client';
+import { isTestOrder } from './test-order';
 import type { CourierValue } from './types';
 
 function unwrap<T>(result: { data: T | null; error: { message: string } | null }): T {
@@ -118,6 +119,9 @@ export type OutboxRow = {
 	last_error: string | null;
 	attempts: number;
 	next_attempt_at: string;
+	resend: boolean;
+	superseded_at: string | null;
+	resolved_at: string | null;
 };
 
 export type WebOrder = {
@@ -152,7 +156,8 @@ const ORDER_SELECT = `id, order_code, order_type, web_status, header, items, men
 		transaction_items(id, item_type, product_id, product_name_snapshot, variant_id, variant_name_snapshot,
 			unit_price, qty, subtotal_item, notes, source_line_ref, mapping_warning, package_choices_snapshot,
 			created_at, transaction_item_addons(addon_id, addon_name_snapshot, qty, unit_price))),
-	web_status_outbox(id, status, created_at, sent_at, failed_at, last_error, attempts, next_attempt_at)`;
+	web_status_outbox(id, status, created_at, sent_at, failed_at, last_error, attempts, next_attempt_at,
+		resend, superseded_at, resolved_at)`;
 
 function sortChildren(o: WebOrder): WebOrder {
 	o.web_status_outbox?.sort((a, b) => a.id - b.id);
@@ -200,10 +205,14 @@ export type WebAlerts = {
 	unopened: { id: string; order_code: string; order_type: WebOrderType }[];
 	voidSlips: { id: string; order_code: string; transaction_id: string | null }[];
 	notices: number;
+	// Saklar go-live website dimatikan (docs/SOP-SAKLAR-GO-LIVE.md).
+	bridgeOff: boolean;
+	// Kiriman ulang yang ditolak website — diselesaikan manual oleh Owner.
+	manual: number;
 };
 
 export async function loadWebAlerts(): Promise<WebAlerts> {
-	const [unopened, slips, notices] = await Promise.all([
+	const [unopened, slips, notices, bridge, manual] = await Promise.all([
 		supabase
 			.from('web_orders')
 			.select('id, order_code, order_type')
@@ -216,13 +225,82 @@ export async function loadWebAlerts(): Promise<WebAlerts> {
 		supabase
 			.from('web_orders')
 			.select('id', { count: 'exact', head: true })
-			.not('cancel_notice', 'is', null)
+			.not('cancel_notice', 'is', null),
+		loadBridgeState(),
+		supabase
+			.from('web_status_outbox')
+			.select('id', { count: 'exact', head: true })
+			.eq('resend', true)
+			.not('failed_at', 'is', null)
+			.is('resolved_at', null)
+			.neq('last_error', 'sebelum_go_live')
 	]);
 	return {
 		unopened: unwrap(unopened) as WebAlerts['unopened'],
 		voidSlips: unwrap(slips) as WebAlerts['voidSlips'],
-		notices: notices.count ?? 0
+		notices: notices.count ?? 0,
+		bridgeOff: bridge?.inactive_reason === 'sebelum_go_live',
+		manual: manual.count ?? 0
 	};
+}
+
+// Daftar Owner: kiriman ulang setelah saklar go-live yang ditolak website.
+export type ResendIssue = {
+	id: number;
+	status: string;
+	last_error: string | null;
+	failed_at: string;
+	web_orders: {
+		id: string;
+		order_code: string;
+		order_type: WebOrderType;
+		web_status: string;
+		transactions: { transaction_number: string; status: string; order_status: string } | null;
+	};
+};
+
+export async function loadResendIssues(): Promise<ResendIssue[]> {
+	return unwrap(
+		await supabase
+			.from('web_status_outbox')
+			.select(
+				`id, status, last_error, failed_at,
+				 web_orders(id, order_code, order_type, web_status,
+				   transactions(transaction_number, status, order_status))`
+			)
+			.eq('resend', true)
+			.not('failed_at', 'is', null)
+			.is('resolved_at', null)
+			.neq('last_error', 'sebelum_go_live')
+			.order('id')
+	) as unknown as ResendIssue[];
+}
+
+export async function resolveResendIssue(id: number): Promise<void> {
+	unwrap(await supabase.rpc('web_resend_resolve', { p_outbox_id: id }));
+}
+
+// Cek koneksi website X1–X2 (khusus Owner, tanpa mengubah data).
+export type ConnectionCheck = {
+	kode: string;
+	uji: string;
+	harapan: string;
+	hasil: string;
+	lolos: boolean;
+};
+
+export async function checkWebConnection(): Promise<{ ok: boolean; checks: ConnectionCheck[] }> {
+	const { data, error } = await supabase.functions.invoke('web-orders-sync', {
+		method: 'POST',
+		body: { mode: 'cek' }
+	});
+	if (error) throw await invokeError(error, 'Gagal menjalankan cek. Periksa koneksi internet.');
+	return data as { ok: boolean; checks: ConnectionCheck[] };
+}
+
+// Lencana UJI untuk pesanan uji tahap D.
+export function isTestWebOrder(h: Pick<WebHeader, 'note' | 'recipient_name'> | null | undefined) {
+	return isTestOrder(h?.note, h?.recipient_name);
 }
 
 export async function syncWebOrders(): Promise<Record<string, unknown>> {
@@ -288,6 +366,12 @@ export const STATUS_LABEL: Record<WebOrderStatus, string> = {
 	selesai: 'Selesai'
 };
 
+// Label status mentah (POS / website / antrean), termasuk pembatalan.
+export function statusLabelOf(status: string): string {
+	if (status === 'batal' || status === 'dibatalkan') return 'Dibatalkan';
+	return STATUS_LABEL[status as WebOrderStatus] ?? status;
+}
+
 // Label tombol "Siap" sesuai tipe pesanan.
 export const READY_LABEL: Record<WebOrderType, string> = {
 	takeaway: 'Siap diambil',
@@ -307,7 +391,16 @@ export function statusText(o: WebOrder): string {
 
 // Status pengiriman ke website (antrean).
 export function outboxState(o: WebOrder): 'ok' | 'menunggu' | 'gagal' {
-	if (o.web_status_outbox.some((r) => r.failed_at && r.last_error !== 'dibatalkan di website'))
+	// Gagal yang sudah dikirim ulang (superseded) atau diselesaikan Owner tidak dihitung.
+	if (
+		o.web_status_outbox.some(
+			(r) =>
+				r.failed_at &&
+				!r.superseded_at &&
+				!r.resolved_at &&
+				r.last_error !== 'dibatalkan di website'
+		)
+	)
 		return 'gagal';
 	if (o.web_status_outbox.some((r) => !r.sent_at && !r.failed_at)) return 'menunggu';
 	return 'ok';
@@ -320,7 +413,8 @@ export const OUTBOX_ERROR_TEXT: Record<string, string> = {
 	belum_lunas: 'pembayaran online belum lunas',
 	sudah_lunas_terkunci: 'pesanan sudah lunas online',
 	pembayaran_berjalan: 'pembayaran online sedang berjalan',
-	status_tidak_dikenal: 'status tidak dikenal'
+	status_tidak_dikenal: 'status tidak dikenal',
+	konflik_status: 'status akhir POS berbeda dengan website — selesaikan manual'
 };
 
 export function mapsUrl(h: WebHeader): string | null {

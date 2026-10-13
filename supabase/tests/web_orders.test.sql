@@ -179,3 +179,46 @@ set test.uid = '00000000-0000-0000-0000-0000000000a2';
 select x ->> 'web_order_code' as kode, (select string_agg(coalesce(i ->> 'mapping_warning', '-'), ' | ') from jsonb_array_elements(x -> 'items') i) as peringatan
 from (select public.get_transaction_print_data(wtx('PL-FDIN03')) x) s;
 reset role;
+
+\echo '=== 13. Saklar go-live: kirim ulang status terakhir setelah menyala lagi'
+-- Selama mati: semua status yang antre ditolak sebelum_go_live.
+update public.web_status_outbox set failed_at = now(), last_error = 'sebelum_go_live'
+where sent_at is null and failed_at is null;
+-- Keadaan website saat menyala lagi (diperbarui tarik terakhir):
+--   F-DLV  website diproses, POS selesai      → kirim ulang 'selesai'
+--   F-DIN  website selesai, POS dibatalkan    → konflik status akhir → daftar Owner
+--   F-ONL  website = status POS               → tidak dikirim
+update public.web_orders set web_status = 'diproses' where order_code = 'PL-FDLV01';
+update public.web_orders set web_status = 'selesai' where order_code = 'PL-FDIN03';
+update public.web_orders w set web_status = t.order_status from public.transactions t
+where t.id = w.transaction_id and w.order_code = 'PL-FONL04';
+select w.order_code, t.status, t.order_status, w.web_status from public.web_orders w
+join public.transactions t on t.id = w.transaction_id where w.order_code in ('PL-FDLV01', 'PL-FDIN03', 'PL-FONL04') order by 1;
+set role authenticated;
+set test.uid = '00000000-0000-0000-0000-0000000000a2';
+select public.web_resend_after_golive();
+reset role;
+set role service_role;
+select public.web_resend_after_golive() as hasil_harus_queued1_manual1_skipped1;
+select public.web_resend_after_golive() as ulang_harus_kosong;
+select string_agg(w.order_code || ':' || o.status, ', ') as due_harus_FDLV_selesai from public.web_outbox_due(20) o join public.web_orders w on w.id = o.web_order_id;
+reset role;
+select w.order_code, o.status, o.resend, o.failed_at is not null as gagal, o.last_error
+from public.web_status_outbox o join public.web_orders w on w.id = o.web_order_id where o.resend order by o.id;
+select count(*) as sebelum_go_live_belum_ditangani_harus_0 from public.web_status_outbox
+where last_error = 'sebelum_go_live' and superseded_at is null;
+\echo '--- kiriman ulang ditolak website → gagal permanen, tidak antre lagi, masuk daftar Owner'
+set role service_role;
+select public.web_outbox_mark((select id from public.web_status_outbox where resend and failed_at is null), 'failed', null, 'transisi_ditolak') is not null;
+select count(*) as due_harus_0 from public.web_outbox_due(20);
+reset role;
+select w.order_code, o.status, o.last_error from public.web_status_outbox o join public.web_orders w on w.id = o.web_order_id
+where o.resend and o.failed_at is not null and o.resolved_at is null and o.last_error <> 'sebelum_go_live' order by o.id;
+\echo '--- hanya Owner yang menandai selesai'
+set role authenticated;
+set test.uid = '00000000-0000-0000-0000-0000000000a1';
+select public.web_resend_resolve((select min(id) from public.web_status_outbox where resend and failed_at is not null));
+set test.uid = '00000000-0000-0000-0000-0000000000a2';
+select public.web_resend_resolve(o.id) from public.web_status_outbox o where o.resend and o.failed_at is not null and o.resolved_at is null;
+select count(*) as daftar_owner_harus_0 from public.web_status_outbox where resend and failed_at is not null and resolved_at is null;
+reset role;

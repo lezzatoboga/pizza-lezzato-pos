@@ -16,6 +16,7 @@
 		mapsUrl,
 		ORDER_TYPE_LABEL,
 		OUTBOX_ERROR_TEXT,
+		isTestWebOrder,
 		outboxState,
 		READY_LABEL,
 		readyWebOrder,
@@ -214,6 +215,7 @@
 			<span class="type {order.order_type}">{ORDER_TYPE_LABEL[order.order_type].toUpperCase()}</span
 			>
 			<h2>{order.order_code}</h2>
+			{#if isTestWebOrder(order.header)}<span class="test-badge">UJI — JANGAN DIBUAT</span>{/if}
 			<span class="status">{statusText(order)}</span>
 		</div>
 		<small class="muted">
@@ -500,6 +502,14 @@
 	}
 	.type.dinein {
 		background: #8a3fb0;
+	}
+	.test-badge {
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		background: #1d4ed8;
+		color: #fff;
+		font-weight: 700;
+		font-size: 0.85rem;
 	}
 	.status {
 		padding: 0.2rem 0.6rem;

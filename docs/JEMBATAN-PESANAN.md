@@ -104,11 +104,11 @@ Perubahan dari uji ini:
 
 Catatan:
 
+- Dari Edge Function lokal, host database = **`db`** (bukan
   `supabase_db_<project_id>`, ditolak Deno — README paket sudah diperbaiki di 3f547ec).
-  `supabase_db_<project_id>`; nama bergaris bawah ditolak Deno).
 - Saat saklar go-live dikosongkan, status yang sedang antre ditandai **gagal
-  (`sebelum_go_live`)** dan tidak dikirim ulang setelah go-live diisi lagi — selama saklar
-  kosong pesanan dikelola di panel admin website (kontrak).
+  (`sebelum_go_live`)**. Perilaku saat saklar menyala lagi: lihat
+  `docs/SOP-SAKLAR-GO-LIVE.md` (kirim ulang otomatis status terakhir, 14 Okt 2026).
 
 ## Backlog Proyek B — pembayaran online (Midtrans)
 

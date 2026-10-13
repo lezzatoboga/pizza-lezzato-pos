@@ -6,6 +6,8 @@ class WebAlertState {
 	unopened = $state<WebAlerts['unopened']>([]);
 	voidSlips = $state<WebAlerts['voidSlips']>([]);
 	notices = $state(0);
+	bridgeOff = $state(false);
+	manual = $state(0);
 
 	async refresh() {
 		try {
@@ -13,6 +15,8 @@ class WebAlertState {
 			this.unopened = a.unopened;
 			this.voidSlips = a.voidSlips;
 			this.notices = a.notices;
+			this.bridgeOff = a.bridgeOff;
+			this.manual = a.manual;
 		} catch {
 			// Gangguan jaringan: pertahankan keadaan terakhir.
 		}
@@ -22,6 +26,8 @@ class WebAlertState {
 		this.unopened = [];
 		this.voidSlips = [];
 		this.notices = 0;
+		this.bridgeOff = false;
+		this.manual = 0;
 	}
 }
 
