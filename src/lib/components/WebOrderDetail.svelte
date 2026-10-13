@@ -131,6 +131,9 @@
 						? 'Pembayaran online belum lunas'
 						: ''
 	);
+	// Lunas online tapi belum tercatat di POS: Bayar & Struk Belum Lunas disembunyikan
+	// (pencatatan otomatis = backlog Proyek B, docs/JEMBATAN-PESANAN.md).
+	const paidOnline = $derived(order.status_bayar === 'lunas' && tx?.payment_status !== 'paid');
 	const needsCourier = $derived(tx?.sales_type === 'delivery');
 	const courierMissing = $derived(needsCourier && !tx?.courier_type);
 
@@ -363,10 +366,14 @@
 				<button
 					class="btn-primary"
 					disabled={busy || tx.payment_status !== 'paid'}
-					title={tx.payment_status !== 'paid' ? 'Lunasi dulu' : undefined}
+					title={tx.payment_status !== 'paid' && !paidOnline ? 'Lunasi dulu' : undefined}
 					onclick={finish}
 				>
-					Selesai{tx.payment_status !== 'paid' ? ' (lunasi dulu)' : ''}
+					Selesai{paidOnline
+						? ' (bayar online belum tercatat di POS)'
+						: tx.payment_status !== 'paid'
+							? ' (lunasi dulu)'
+							: ''}
 				</button>
 			{/if}
 		</div>
@@ -381,7 +388,7 @@
 					{courierMissing ? 'Pilih kurir' : 'Ganti kurir'}
 				</button>
 			{/if}
-			{#if tx.payment_status !== 'paid'}
+			{#if tx.payment_status !== 'paid' && !paidOnline}
 				<button class="btn-ghost" disabled={busy || courierMissing} onclick={() => (paying = true)}
 					>Bayar</button
 				>
@@ -389,11 +396,13 @@
 			{#if tx.kitchen_ticket_print_count > 0}
 				<button class="btn-ghost" disabled={busy} onclick={ticket}>Tiket ulang</button>
 			{/if}
-			<button class="btn-ghost" disabled={busy || courierMissing} onclick={struk}>
-				Struk {tx.payment_status === 'paid' ? 'Lunas' : 'Belum Lunas'}{isReceiptReprint(tx)
-					? ' (ulang)'
-					: ''}
-			</button>
+			{#if !paidOnline}
+				<button class="btn-ghost" disabled={busy || courierMissing} onclick={struk}>
+					Struk {tx.payment_status === 'paid' ? 'Lunas' : 'Belum Lunas'}{isReceiptReprint(tx)
+						? ' (ulang)'
+						: ''}
+				</button>
+			{/if}
 			<button class="btn-ghost danger" disabled={busy} onclick={() => (voiding = true)}
 				>Batalkan</button
 			>

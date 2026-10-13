@@ -1,4 +1,4 @@
-> Salinan dari repo website-pl, commit 3aba9af, 13 Okt 2026. Sumber kebenaran ada di repo website — jangan diedit di sini.
+> Salinan dari repo website-pl, commit 41e0503, 13 Okt 2026 (via paket website tiruan supabase/website-tiruan/). Sumber kebenaran ada di repo website — jangan diedit di sini.
 
 # Kontrak Data Website ↔ POS
 
@@ -345,7 +345,7 @@ panel (`service_role`). Fungsi bantu `public.pesanan_pos(p_created_at timestampt
 |---|---|---|
 | `id` | text PK | `lobak` |
 | `nama` | text NOT NULL | "Pizza Lezzato Jl. Lobak" |
-| `lat`, `lng` | double precision NOT NULL | nilai **persis** konstanta `OUTLET_KOORDINAT` sekarang (presisi penuh, supaya hasil haversine tak bergeser) |
+| `lat`, `lng` | **numeric** NOT NULL | nilai **persis** konstanta `OUTLET_KOORDINAT` sekarang. Bukan double: Supabase (SQL Editor & API) mengirim double hanya 15 digit — ditemukan saat 1A dijalankan 13 Okt, diperbaiki `APPLY_KONTRAK_POS_1A2` |
 | `utama` | boolean NOT NULL | tepat satu baris `true` (unique index parsial) |
 | `aktif` | boolean NOT NULL | |
 
@@ -392,6 +392,9 @@ revoke all on schema pos from public, anon, authenticated;
 -- create view pos.v_pesanan / v_item_pesanan / v_pelanggan / v_pengaturan_ongkir ...
 grant usage on schema pos to pos_reader;
 grant select on pos.v_pesanan, pos.v_item_pesanan, pos.v_pelanggan, pos.v_pengaturan_ongkir to pos_reader;
+-- WAJIB (ditemukan uji paket website tiruan 13 Okt): v_pesanan memanggil public.pesanan_pos(); Postgres memeriksa
+-- hak EXECUTE fungsi di dalam view terhadap PENGGUNA view (bukan pemiliknya). Tetap jalan sesudah tahap 8.
+grant execute on function public.pesanan_pos(timestamptz) to pos_reader;
 alter role pos_reader set default_transaction_read_only = on;
 alter role pos_reader set statement_timeout = '5s';
 alter role pos_reader connection limit 3;
@@ -546,6 +549,12 @@ d. Tabel & kolom ini dibuat di pekerjaan ini (kosong); **alur Midtrans (Proyek B
    detail Tahap B di HANDOVER §5 poin 4.
 
 ### 2.5 Panel admin website setelah go-live
+
+> **Ditambahkan saat menulis SQL (13 Okt, `APPLY_KONTRAK_POS_1B`):** selain penolakan di route admin,
+> trigger DB `orders_jaga_status_pos` menolak perubahan status pesanan POS dari **kode website**
+> (`session_user = authenticator`) dengan `status_dikelola_pos`; SQL Editor Owner & fungsi POS tetap bisa.
+> Tidur selama `go_live_at` NULL. Bila kelak website perlu mengubah status pesanan POS (mis. batal
+> otomatis QR kedaluwarsa di Proyek B), trigger ini disesuaikan di pekerjaan itu.
 
 - Pesanan POS (`pesanan_pos(created_at)`): tombol Proses/Selesai, Koreksi, Batalkan & dropdown detail
   **disembunyikan** → "Status dikelola dari POS". Server (`POST /admin/api/pesanan/[kode]/status`,

@@ -264,6 +264,8 @@ export type TransactionRow = {
 	payment_methods: { name: string } | null;
 	bank_accounts: { bank_name: string } | null;
 	marketplace_platforms: { name: string } | null;
+	// Pesanan website (jembatan): status bayar di website.
+	web_orders: { status_bayar: string | null } | null;
 	transaction_items: {
 		item_type: 'product' | 'package';
 		product_name_snapshot: string;
@@ -296,6 +298,7 @@ export async function loadTransactions(
 				 customer_name,
 				 courier_type, courier_user_id, courier_id, couriers(name),
 				 payment_methods(name), bank_accounts(bank_name), marketplace_platforms(name),
+				 web_orders(status_bayar),
 				 transaction_items(item_type, product_name_snapshot, variant_name_snapshot, qty,
 				   package_choices_snapshot,
 				   transaction_item_addons(addon_name_snapshot, qty))`

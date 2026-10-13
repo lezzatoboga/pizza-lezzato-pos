@@ -129,6 +129,10 @@
 		}
 	}
 
+	// Lunas online tapi belum tercatat di POS (backlog Proyek B): tanpa Bayar & Struk Belum Lunas.
+	const paidOnline = (r: TransactionRow) =>
+		r.payment_status === 'unpaid' && r.web_orders?.status_bayar === 'lunas';
+
 	function channelText(r: TransactionRow) {
 		return r.marketplace_platforms?.name ?? CHANNEL_LABEL[r.channel] ?? r.channel;
 	}
@@ -219,6 +223,8 @@
 									? ` ${r.bank_accounts.bank_name}`
 									: ''}</span
 							>
+						{:else if paidOnline(r)}
+							<span class="badge paid">Lunas online · belum tercatat di POS</span>
 						{:else}
 							<button
 								class="btn-primary pay"
@@ -243,15 +249,17 @@
 								>
 									{r.kitchen_ticket_print_count > 0 ? 'Tiket ulang' : 'Tiket dapur'}
 								</button>
-								<button
-									class="btn-ghost"
-									onclick={() => runPrint(r, 'receipt')}
-									disabled={!!printingId}
-								>
-									{printingId === r.id
-										? 'Mencetak…'
-										: `Struk ${r.payment_status === 'paid' ? 'Lunas' : 'Belum Lunas'}${isReceiptReprint(r) ? ' (ulang)' : ''}`}
-								</button>
+								{#if !paidOnline(r)}
+									<button
+										class="btn-ghost"
+										onclick={() => runPrint(r, 'receipt')}
+										disabled={!!printingId}
+									>
+										{printingId === r.id
+											? 'Mencetak…'
+											: `Struk ${r.payment_status === 'paid' ? 'Lunas' : 'Belum Lunas'}${isReceiptReprint(r) ? ' (ulang)' : ''}`}
+									</button>
+								{/if}
 								<button
 									class="link void-link"
 									onclick={() => (voiding = r)}

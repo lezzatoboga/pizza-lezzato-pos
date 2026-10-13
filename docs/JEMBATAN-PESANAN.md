@@ -65,6 +65,36 @@ pembayaran atau refund** (Lunas → Belum Lunas), aturan ini harus ditinjau ulan
 beralih ke penghitung cetak per status (`receipt_unpaid_print_count` / `receipt_paid_print_count`
 di `transactions`, diisi oleh `mark_receipt_printed`).
 
+## Temuan uji paket website tiruan (13 Okt 2026)
+
+- **`pos_reader` wajib punya `grant execute on function public.pesanan_pos(timestamptz)`.**
+  `pos.v_pesanan` memanggil `public.pesanan_pos()`, dan Postgres memeriksa hak EXECUTE fungsi di
+  dalam view terhadap **pengguna** view (bukan pemiliknya). Tanpa grant ini `v_pesanan` gagal
+  dibaca (galat *permission denied*). Sudah ada di paket
+  (`supabase/website-tiruan/02_peran_pos_lokal.sql`) dan di kontrak §2.1; grant ini tetap
+  berlaku sesudah tahap 8.
+- **Perbandingan dengan website tiruan mini tahap A** (`supabase/dev/website-stub.sql`): di sana
+  muncul *permission denied for table stub_settings* dan diselesaikan dengan cara yang sama seperti paket resmi — fungsi
+  go-live dibuat `SECURITY DEFINER` (agar bisa membaca pengaturan go-live yang tidak boleh dibaca
+  `pos_reader`) **dan** `pos_reader` diberi EXECUTE pada fungsi itu. Bedanya hanya nama
+  (`pos.stub_pesanan_pos` vs `public.pesanan_pos`) dan paket resmi juga mencabut EXECUTE dari
+  `public`/`anon`/`authenticated` lebih dulu. Tahap B mengikuti paket resmi; website tiruan mini
+  tidak dipakai lagi.
+
+## Backlog Proyek B — pembayaran online (Midtrans)
+
+Keputusan Owner 13 Okt 2026 (setelah tahap A): untuk pesanan yang **sudah lunas online**
+(`status_bayar = lunas` di website), POS **menyembunyikan** tombol **Bayar** dan **Struk Belum
+Lunas** — ini hanya penutup sementara. Saat pembayaran online aktif, yang harus dikerjakan:
+
+- **Pencatatan pembayaran otomatis:** begitu `status_bayar` website = `lunas`, POS mencatat
+  pembayaran **otomatis** dengan metode **"Online/website"** (nominal dari `dibayar_rupiah`,
+  waktu dari `dibayar_at`), tanpa tindakan kasir. Tanpa ini:
+  - aturan "Selesai hanya kalau lunas" membuat pesanan lunas online **tidak bisa diselesaikan**;
+  - laporan penjualan menghitungnya sebagai **belum lunas**.
+- **Jenis struk untuk pesanan lunas online:** struk Lunas yang menyebut pembayaran online
+  (metode, waktu bayar) — ditentukan bersama tinjauan aturan CETAK ULANG di atas.
+
 ## Backlog (dibahas bersama kontrak data)
 
 ### Ongkir: satu sumber aturan
