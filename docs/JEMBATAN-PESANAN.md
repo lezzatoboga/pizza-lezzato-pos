@@ -81,6 +81,35 @@ di `transactions`, diisi oleh `mark_receipt_printed`).
   `public`/`anon`/`authenticated` lebih dulu. Tahap B mengikuti paket resmi; website tiruan mini
   tidak dipakai lagi.
 
+## Tahap B — uji lokal terhadap paket website tiruan (13 Okt 2026)
+
+Paket `supabase/website-tiruan/` (website 41e0503) dipasang ke database terpisah
+`website_tiruan` di Supabase lokal (Postgres 17) mengikuti README; Edge Function lokal
+terhubung sebagai `pos_reader` / `pos_status_writer` (kata sandi uji lokal). P1–P8 dan uji
+tambahan POS lolos dari keadaan bersih (86 pemeriksaan).
+
+Perubahan dari uji ini:
+
+- **Sinkron pelanggan pindah ke `pos.v_pelanggan`** (migrasi `20261014000002`): inkremental
+  `updated_at > kursor − 2 menit`, rekonsiliasi id penuh sekali sehari (WIB). Pelanggan yang
+  hilang di website **dilepas** (tidak dihapus); pencocokan id website dulu, lalu nomor HP.
+  Koneksinya memakai secret yang sama dengan jembatan, **`WEBSITE_POS_READER_DB_URL`** —
+  secret lama `WEBSITE_CUSTOMERS_DB_URL` tidak dipakai lagi (dihapus Owner di tahap C).
+  Saklar jeda tetap berlaku.
+- **Rangkaian status terkirim dalam satu run** (diproses → siap → selesai), tetap berurutan
+  per pesanan; sebelumnya satu langkah per 30 detik.
+- **Pesanan lunas online yang dibatalkan di website tidak di-void otomatis** — hanya peringatan
+  (keputusan 4: yang sudah dibayar hanya diberi peringatan), walau pembayaran online belum
+  tercatat di POS.
+
+Catatan:
+
+- Dari Edge Function lokal, host database = **`db`** (README paket menyebut
+  `supabase_db_<project_id>`; nama bergaris bawah ditolak Deno).
+- Saat saklar go-live dikosongkan, status yang sedang antre ditandai **gagal
+  (`sebelum_go_live`)** dan tidak dikirim ulang setelah go-live diisi lagi — selama saklar
+  kosong pesanan dikelola di panel admin website (kontrak).
+
 ## Backlog Proyek B — pembayaran online (Midtrans)
 
 Keputusan Owner 13 Okt 2026 (setelah tahap A): untuk pesanan yang **sudah lunas online**

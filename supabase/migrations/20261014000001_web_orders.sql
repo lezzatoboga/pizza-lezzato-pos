@@ -463,7 +463,9 @@ begin
     end if;
 
     if h ->> 'status' = 'batal' then
-      if v_tx.payment_status = 'unpaid' then
+      -- Sudah dibayar = lunas di POS ATAU lunas online di website (pembayaran online
+      -- belum tercatat otomatis di POS — backlog Proyek B): hanya peringatan.
+      if v_tx.payment_status = 'unpaid' and coalesce(h ->> 'status_bayar', '') not in ('lunas', 'refund') then
         update public.transactions
         set status = 'voided', void_source = 'website', voided_at = now(),
             void_reason = 'Dibatalkan di website'
@@ -478,7 +480,9 @@ begin
         v_voided := v_voided + 1;
       else
         update public.web_orders
-        set cancel_notice = 'Pesanan dibatalkan di website, tetapi transaksi sudah dibayar — tangani pengembalian dana dan batalkan transaksi bila perlu.'
+        set cancel_notice = case when v_tx.payment_status = 'paid'
+              then 'Pesanan dibatalkan di website, tetapi transaksi sudah dibayar — tangani pengembalian dana dan batalkan transaksi bila perlu.'
+              else 'Pesanan dibatalkan di website, tetapi sudah lunas online — pengembalian dana lewat admin website; batalkan transaksi di POS bila perlu.' end
         where id = v_id;
       end if;
       continue;

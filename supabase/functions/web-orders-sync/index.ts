@@ -33,32 +33,50 @@ async function sendOutbox(
 	admin: ReturnType<typeof adminClient>,
 	writer: Sql
 ): Promise<{ sent: number; failed: number; retry: number; inactive: boolean }> {
-	const { data, error } = await admin.rpc('web_outbox_due', { p_limit: 20 });
-	if (error) throw new Error(error.message);
 	let sent = 0;
 	let failed = 0;
 	let retry = 0;
 	let inactive = false;
-	for (const row of (data ?? []) as Outbox[]) {
-		const res = await setOrderStatus(writer, row.web_order_id, row.status, row.diubah_kasir);
-		if (res.ok) {
-			await admin.rpc('web_outbox_mark', { p_id: row.id, p_outcome: 'ok', p_result: res.result });
-			sent++;
-		} else if (res.rule && res.code !== 'menunggu_admin') {
-			await admin.rpc('web_outbox_mark', { p_id: row.id, p_outcome: 'failed', p_error: res.code });
-			failed++;
-			if (res.code === 'sebelum_go_live') inactive = true;
-		} else {
-			await admin.rpc('web_outbox_mark', {
-				p_id: row.id,
-				p_outcome: 'retry',
-				p_error: res.code === 'jaringan' ? res.message.slice(0, 300) : res.code
-			});
-			retry++;
-			if (res.code === 'jaringan') break; // website tak terjangkau: sisanya menunggu run berikutnya
-		}
+	// web_outbox_due memberi satu baris (tertua) per pesanan; ulangi supaya rangkaian
+	// status (diproses → siap → selesai) terkirim dalam satu run, tetap berurutan.
+	for (let round = 0; round < 6; round++) {
+		const { data, error } = await admin.rpc('web_outbox_due', { p_limit: 20 });
+		if (error) throw new Error(error.message);
+		const rows = (data ?? []) as Outbox[];
+		if (!rows.length) break;
+		const before = sent + failed;
+		const stop = await sendRows(rows);
+		if (stop || sent + failed === before) break;
 	}
 	return { sent, failed, retry, inactive };
+
+	// true = berhenti (website tak terjangkau).
+	async function sendRows(rows: Outbox[]): Promise<boolean> {
+		for (const row of rows) {
+			const res = await setOrderStatus(writer, row.web_order_id, row.status, row.diubah_kasir);
+			if (res.ok) {
+				await admin.rpc('web_outbox_mark', { p_id: row.id, p_outcome: 'ok', p_result: res.result });
+				sent++;
+			} else if (res.rule && res.code !== 'menunggu_admin') {
+				await admin.rpc('web_outbox_mark', {
+					p_id: row.id,
+					p_outcome: 'failed',
+					p_error: res.code
+				});
+				failed++;
+				if (res.code === 'sebelum_go_live') inactive = true;
+			} else {
+				await admin.rpc('web_outbox_mark', {
+					p_id: row.id,
+					p_outcome: 'retry',
+					p_error: res.code === 'jaringan' ? res.message.slice(0, 300) : res.code
+				});
+				retry++;
+				if (res.code === 'jaringan') return true; // website tak terjangkau: sisanya menunggu run berikutnya
+			}
+		}
+		return false;
+	}
 }
 
 async function pullOrders(

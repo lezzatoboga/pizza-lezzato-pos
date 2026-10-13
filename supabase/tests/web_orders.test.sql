@@ -126,13 +126,15 @@ reset role;
 set role service_role;
 select public.apply_web_orders(jsonb_build_array(
   jsonb_build_object('header', (fx('PL-FPCK02') -> 'header') || '{"status":"batal"}'::jsonb),
-  jsonb_build_object('header', (fx('PL-FDLV01') -> 'header') || '{"status":"batal","discount":0,"voucher_code":null,"total":163000}'::jsonb)
+  jsonb_build_object('header', (fx('PL-FDLV01') -> 'header') || '{"status":"batal","discount":0,"voucher_code":null,"total":163000}'::jsonb),
+  -- lunas online (belum tercatat di POS): peringatan saja, tidak di-void
+  jsonb_build_object('header', (fx('PL-FONL04') -> 'header') || '{"status":"batal"}'::jsonb)
 )) as hasil_harus_voided_1;
 reset role;
 select w.order_code, t.status, t.void_source, t.void_reason, t.voided_by is null as tanpa_kasir,
        w.void_slip_pending, w.cancel_notice is not null as ada_peringatan
 from public.web_orders w join public.transactions t on t.id = w.transaction_id
-where w.order_code in ('PL-FPCK02', 'PL-FDLV01') order by w.order_code;
+where w.order_code in ('PL-FPCK02', 'PL-FDLV01', 'PL-FONL04') order by w.order_code;
 select count(*) as antrean_dibatalkan_dari_website_harus_0 from public.web_status_outbox o where o.status = 'dibatalkan';
 
 \echo '=== 8. Void oleh kasir (F-DIN) → antre dibatalkan'
